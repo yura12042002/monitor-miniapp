@@ -398,6 +398,87 @@
         padding: 6px 10px;
         font-size: 13px;
       }
+      .cards {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 8px;
+        margin: 10px 0;
+      }
+      .card {
+        background: var(--card);
+        border-radius: 12px;
+        padding: 10px 12px;
+      }
+      .card .num {
+        font-size: 22px;
+        font-weight: 700;
+      }
+      .card.good .num {
+        color: var(--good-text);
+      }
+      .card.bad .num {
+        color: var(--danger);
+      }
+      .qtable {
+        width: 100%;
+        border-collapse: collapse;
+        font-size: 14px;
+      }
+      .qtable th {
+        text-align: left;
+        color: var(--hint);
+        font-weight: 400;
+        font-size: 12px;
+        padding: 4px 6px;
+      }
+      .qtable td {
+        padding: 6px;
+        border-top: 1px solid var(--bg);
+      }
+      .qtable td.n {
+        text-align: right;
+        white-space: nowrap;
+      }
+      .run {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        padding: 8px 10px;
+        margin-bottom: 6px;
+        border-radius: 10px;
+        border-left: 4px solid #8e8e93;
+        background: rgba(142, 142, 147, 0.12);
+      }
+      .run.ok {
+        border-left-color: var(--good);
+      }
+      .run.blocked,
+      .run.error {
+        border-left-color: var(--danger);
+      }
+      .run .when {
+        flex: none;
+        color: var(--hint);
+        font-size: 12px;
+        width: 74px;
+      }
+      .run .what {
+        flex: 1;
+        min-width: 0;
+        overflow-wrap: anywhere;
+      }
+      .run .res {
+        flex: none;
+        font-size: 13px;
+        text-align: right;
+      }
+      .pause-banner {
+        background: rgba(229, 57, 53, 0.12);
+        color: var(--danger);
+        border-radius: 10px;
+        padding: 8px 12px;
+        margin: 8px 0;
+      }
       [hidden] {
         display: none !important;
       }
@@ -411,6 +492,7 @@
       <div class="tabs">
         <button type="button" class="tab active" id="tabTargets">📋 Модели</button>
         <button type="button" class="tab" id="tabWatch">⭐ Слежу <span id="watchCount"></span></button>
+        <button type="button" class="tab" id="tabStats">📊 Обходы</button>
       </div>
     </header>
 
@@ -421,6 +503,8 @@
       </div>
       <div id="watchList" style="margin-top: 10px"></div>
     </section>
+
+    <section id="statsView" hidden></section>
 
     <section id="listView">
       <div class="muted" id="hint">
@@ -456,6 +540,8 @@
         view: null,
         nextNewId: -1,
         tab: 'targets',
+        watchItem: null,
+        dashboard: null,
         item: null,
         watched: [],
         watchAdd: new Map(),
@@ -562,6 +648,72 @@
             })
           : '';
 
+      /** Строка «⭐ Слежу»: [id, заголовок, ₽, ссылка, фото, проходит, снято, порог, цель, цены, проверки, впервые, последний]. */
+      function watchFromRow(row) {
+        const [
+          id,
+          title,
+          priceRub,
+          url,
+          img,
+          ok,
+          removed,
+          thresholdRub,
+          targetName,
+          trail,
+          checks,
+          firstSeen,
+          lastSeen,
+        ] = row;
+        return {
+          ...normalizeWatch({
+            id,
+            title,
+            priceRub,
+            url,
+            img,
+            ok: ok === 1,
+            removed: removed === 1,
+            thresholdRub,
+            targetName,
+          }),
+          trail: Array.isArray(trail) ? trail.map(Number) : [],
+          checks: Array.isArray(checks)
+            ? checks.map(([at, code, price]) => ({ at, code, priceRub: price === null ? null : Number(price) }))
+            : [],
+          firstSeen: Number(firstSeen) || null,
+          lastSeen: Number(lastSeen) || null,
+        };
+      }
+
+      /** Сводка «📊 Обходы» (одна форма в ссылке и в API). */
+      function dashboardFrom(d) {
+        if (!d) return null;
+        const [runs, ok, blocked, failed, found, fresh, finds, discoveries] = d.s || [];
+        return {
+          day: { runs, ok, blocked, failed, found, fresh, finds, discoveries },
+          listings: d.n || 0,
+          pausedUntil: d.p || null,
+          pauseReason: d.pr || null,
+          queries: (d.q || []).map(([query, qRuns, qOk, qFound, qFresh]) => ({
+            query,
+            runs: qRuns,
+            ok: qOk,
+            found: qFound,
+            fresh: qFresh,
+          })),
+          recent: (d.r || []).map(([at, label, watch, code, rFound, rFresh, seconds]) => ({
+            at,
+            label,
+            watch: watch === 1,
+            code,
+            found: rFound,
+            fresh: rFresh,
+            seconds,
+          })),
+        };
+      }
+
       function normalizeWatch(item) {
         return {
           id: item.id,
@@ -602,19 +754,8 @@
                   removedCount,
                 }),
             ),
-            watched: (data.w || []).map(([id, title, priceRub, url, img, ok, removed, thresholdRub, targetName]) =>
-              normalizeWatch({
-                id,
-                title,
-                priceRub,
-                url,
-                img,
-                ok: ok === 1,
-                removed: removed === 1,
-                thresholdRub,
-                targetName,
-              }),
-            ),
+            watched: (data.w || []).map(watchFromRow),
+            dashboard: dashboardFrom(data.d),
           };
         }
         const plain = /[#&]t=([A-Za-z0-9_-]+)/.exec(location.hash);
@@ -808,7 +949,7 @@
             toggleWatch(item);
           });
           row.append(thumb({ name: item.title, img: item.img }, 'thumb'), info, cost, remove);
-          row.addEventListener('click', () => openLink(item.url));
+          row.addEventListener('click', () => (item.adding ? openLink(item.url) : showWatchItem(item.id)));
           list.append(row);
         }
       }
@@ -927,13 +1068,20 @@
 
       /** Экран объявления: фото крупно, цена (зелёная — по вашей цене), история цены, ссылка, ⭐, история в чат. */
       function renderItem(target, listing) {
+        renderItemView(listing, { name: target.name, threshold: current(target).priceRub });
+      }
+
+      const CHECK_TEXT = ['✓', 'снято с продажи', '✗ заглушка Avito', '✗ страница не разобрана', '✗ не открылась'];
+
+      /** Страница объявления; ctx — цель (название и порог) или null, если подходящей цели нет. */
+      function renderItemView(listing, ctx) {
         const view = $('detailView');
         view.textContent = '';
         const hero = thumb({ name: listing.title || '?', img: listing.img }, 'hero');
         if (listing.removed) hero.classList.add('gone');
         view.append(hero, el('h2', '', listing.title));
-        const threshold = current(target).priceRub;
-        const ok = !listing.removed && listing.priceRub !== null && listing.priceRub <= threshold;
+        const threshold = ctx && ctx.threshold ? ctx.threshold : null;
+        const ok = !listing.removed && listing.priceRub !== null && threshold !== null && listing.priceRub <= threshold;
         const price = el('div', 'big-price', listing.priceRub === null ? 'цена не указана' : rub(listing.priceRub));
         if (listing.removed) price.classList.add('gone');
         else if (ok) price.classList.add('ok');
@@ -942,18 +1090,20 @@
           view.append(
             el('div', 'gone-banner', 'Снято с продажи. Последний раз видели ' + minuteDate(listing.lastSeen) + '.'),
           );
-        } else {
+        } else if (ctx && threshold !== null) {
           view.append(
             el(
               'div',
               'muted',
               (ok ? '🟢 проходит по вашей цене' : '⚪ дороже вашей цены') +
                 ' «' +
-                target.name +
+                ctx.name +
                 '» — до ' +
                 rub(threshold),
             ),
           );
+        } else {
+          view.append(el('div', 'muted', '⚪ цели с этой моделью нет'));
         }
         const info = el('div', 'panel');
         const line = (name, value) => {
@@ -974,6 +1124,24 @@
         }
         if (isWatched(listing.id)) line('⭐ Слежу', 'ПК проверяет раз в ~2 ч');
         view.append(info);
+        if (listing.checks && listing.checks.length > 0) {
+          const checks = el('div', 'panel');
+          checks.append(el('div', 'muted', 'ПК открывал страницу (новые сверху)'));
+          for (const check of listing.checks) {
+            const row = el('div', 'stat');
+            const result =
+              check.code === 0
+                ? '✓ ' + (check.priceRub === null ? 'цена не указана' : rub(check.priceRub))
+                : CHECK_TEXT[check.code] || '?';
+            row.append(el('span', 'muted', minuteDate(check.at)), el('b', '', result));
+            checks.append(row);
+          }
+          view.append(checks);
+        } else if (isWatched(listing.id)) {
+          view.append(
+            el('div', 'muted', 'ПК ещё не проверял — первая проверка примерно через 2 часа после «⭐ Следить».'),
+          );
+        }
 
         const actions = el('div', 'actions');
         const open = el('button', '', 'Открыть на Avito');
@@ -995,6 +1163,90 @@
         view.append(actions);
       }
 
+      function showWatchItem(listingId) {
+        state.watchItem = listingId;
+        haptic('select');
+        render();
+        window.scrollTo(0, 0);
+      }
+
+      function statusText(code) {
+        return ['✓ выдача', 'пусто', '⏸ блок', '✗ ошибка', '… идёт'][code] || '?';
+      }
+
+      function renderStats() {
+        const view = $('statsView');
+        view.textContent = '';
+        const d = state.dashboard;
+        if (!d) {
+          view.append(el('div', 'empty muted', 'Сводки пока нет — она появится со следующей кнопкой «📋 Цели».'));
+          return;
+        }
+        if (d.pausedUntil && d.pausedUntil * 60_000 > Date.now()) {
+          view.append(
+            el(
+              'div',
+              'pause-banner',
+              'Avito на паузе до ' + minuteDate(d.pausedUntil) + (d.pauseReason ? ': ' + d.pauseReason : ''),
+            ),
+          );
+        }
+        const cards = el('div', 'cards');
+        const card = (label, value, kind) => {
+          const box = el('div', 'card' + (kind ? ' ' + kind : ''));
+          box.append(el('div', 'num', String(value)), el('div', 'muted', label));
+          cards.append(box);
+        };
+        const percent = d.day.runs ? Math.round((d.day.ok * 100) / d.day.runs) : 0;
+        card('обходов за сутки', d.day.runs);
+        card('удачных', percent + ' %', percent >= 80 ? 'good' : percent < 50 && d.day.runs ? 'bad' : '');
+        card('блоков', d.day.blocked, d.day.blocked ? 'bad' : '');
+        card('ошибок', d.day.failed, d.day.failed ? 'bad' : '');
+        card('новых объявлений', d.day.fresh, d.day.fresh ? 'good' : '');
+        card('находок прислано', d.day.finds, d.day.finds ? 'good' : '');
+        card('новых моделей', d.day.discoveries);
+        card('объявлений в базе', d.listings);
+        view.append(cards);
+
+        if (d.queries.length > 0) {
+          const panel = el('div', 'panel');
+          panel.append(el('div', 'muted', 'По запросам за сутки'));
+          const table = el('table', 'qtable');
+          const head = el('tr');
+          for (const title of ['Что искали', 'Обходов', 'Удачно', 'Новых']) head.append(el('th', '', title));
+          table.append(head);
+          for (const q of d.queries) {
+            const tr = el('tr');
+            tr.append(
+              el('td', '', q.query),
+              el('td', 'n', String(q.runs)),
+              el('td', 'n', (q.runs ? Math.round((q.ok * 100) / q.runs) : 0) + ' %'),
+              el('td', 'n', String(q.fresh)),
+            );
+            table.append(tr);
+          }
+          panel.append(table);
+          view.append(panel);
+        }
+
+        const list = el('div', 'panel');
+        list.append(el('div', 'muted', 'Последние обходы (новые сверху)'));
+        if (d.recent.length === 0) list.append(el('div', 'muted', 'Обходов ещё не было.'));
+        for (const run of d.recent) {
+          const row = el('div', 'run ' + (['ok', 'ok', 'blocked', 'error', ''][run.code] || ''));
+          const what = el('div', 'what');
+          what.append(el('div', '', run.label));
+          const found =
+            run.found === null || run.found === undefined
+              ? ''
+              : ' · ' + run.found + ' объявл.' + (run.fresh ? ', ' + run.fresh + ' новых' : '');
+          what.append(el('div', 'sub', statusText(run.code) + found + (run.seconds ? ' · ' + run.seconds + ' с' : '')));
+          row.append(el('div', 'when', minuteDate(run.at)), what);
+          list.append(row);
+        }
+        view.append(list);
+      }
+
       function showItem(listingId) {
         if (!listingId) return;
         state.item = listingId;
@@ -1006,16 +1258,30 @@
       function render() {
         showError('');
         const target = state.view === null ? null : findTarget(state.view);
-        $('top').hidden = Boolean(target);
-        $('listView').hidden = Boolean(target) || state.tab !== 'targets';
-        $('watchView').hidden = Boolean(target) || state.tab !== 'watch';
-        $('detailView').hidden = !target;
+        const watchItem =
+          !target && state.tab === 'watch' && state.watchItem !== null
+            ? state.watched.find((item) => item.id === state.watchItem) || null
+            : null;
+        if (!watchItem) state.watchItem = null;
+        const page = Boolean(target || watchItem);
+        $('top').hidden = page;
+        $('listView').hidden = page || state.tab !== 'targets';
+        $('watchView').hidden = page || state.tab !== 'watch';
+        $('statsView').hidden = page || state.tab !== 'stats';
+        $('detailView').hidden = !page;
         $('tabTargets').classList.toggle('active', state.tab === 'targets');
         $('tabWatch').classList.toggle('active', state.tab === 'watch');
+        $('tabStats').classList.toggle('active', state.tab === 'stats');
         $('watchCount').textContent = watchedCount() ? '(' + watchedCount() + ')' : '';
         const listing = target && state.item !== null ? target.listings.find((l) => l.id === state.item) : null;
         if (!listing) state.item = null;
-        if (target) {
+        if (watchItem) {
+          renderItemView(
+            watchItem,
+            watchItem.targetName ? { name: watchItem.targetName, threshold: watchItem.thresholdRub } : null,
+          );
+          tg.BackButton.show();
+        } else if (target) {
           if (listing) renderItem(target, listing);
           else renderDetail(target);
           tg.BackButton.show();
@@ -1023,6 +1289,7 @@
           state.view = null;
           renderList();
           if (state.tab === 'watch') renderWatch();
+          if (state.tab === 'stats') renderStats();
           tg.BackButton.hide();
         }
         updateMainButton();
@@ -1187,7 +1454,8 @@
         const body = await api('/api/targets');
         state.at = body.at || null;
         state.targets = body.targets.map(normalize);
-        state.watched = (body.watched || []).map(normalizeWatch);
+        state.watched = (body.w || []).map(watchFromRow);
+        state.dashboard = dashboardFrom(body.d);
         render();
       }
 
@@ -1198,6 +1466,11 @@
       $('allOn').addEventListener('click', () => setAll(true));
       $('tabTargets').addEventListener('click', () => {
         state.tab = 'targets';
+        render();
+      });
+      $('tabStats').addEventListener('click', () => {
+        state.tab = 'stats';
+        haptic('select');
         render();
       });
       $('tabWatch').addEventListener('click', () => {
@@ -1237,7 +1510,8 @@
         tg.expand();
         tg.MainButton.onClick(() => save());
         tg.BackButton.onClick(() => {
-          if (state.item !== null) state.item = null;
+          if (state.watchItem !== null) state.watchItem = null;
+          else if (state.item !== null) state.item = null;
           else state.view = null;
           render();
           window.scrollTo(0, 0);
@@ -1250,6 +1524,7 @@
           state.at = fromLink.at;
           state.targets = fromLink.targets;
           state.watched = fromLink.watched;
+          state.dashboard = fromLink.dashboard || null;
           render();
         } else {
           load().catch((error) => showError('Не загрузилось: ' + error.message));
