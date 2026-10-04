@@ -267,6 +267,76 @@
         gap: 8px;
         margin-top: 12px;
       }
+      .tabs {
+        display: flex;
+        gap: 4px;
+        margin: 8px 0 4px;
+        padding: 3px;
+        background: var(--card);
+        border-radius: 12px;
+      }
+      .tab {
+        flex: 1;
+        padding: 7px 6px;
+        border-radius: 9px;
+        background: transparent;
+        color: var(--text);
+        font-size: 14px;
+      }
+      .tab.active {
+        background: var(--bg);
+        font-weight: 600;
+      }
+      .wrow {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        padding: 8px 10px;
+        margin-bottom: 8px;
+        border-radius: 12px;
+        border-left: 4px solid #8e8e93;
+        background: rgba(142, 142, 147, 0.16);
+        cursor: pointer;
+      }
+      .wrow.ok {
+        border-left-color: #34c759;
+        background: rgba(52, 199, 89, 0.18);
+      }
+      .wrow.removed,
+      .wrow.pending {
+        opacity: 0.5;
+      }
+      .wrow.adding {
+        border-left-style: dashed;
+      }
+      .cost {
+        flex: none;
+        font-weight: 600;
+      }
+      .ok .cost {
+        color: #2e9e4f;
+      }
+      .offer.ok {
+        background: rgba(52, 199, 89, 0.14);
+        border-radius: 8px;
+        padding-left: 6px;
+        padding-right: 6px;
+      }
+      .star {
+        flex: none;
+        padding: 4px 6px;
+        background: transparent;
+        color: var(--hint);
+        font-size: 18px;
+        line-height: 1;
+      }
+      .star.on {
+        color: #f5b301;
+      }
+      button.small {
+        padding: 6px 10px;
+        font-size: 13px;
+      }
       [hidden] {
         display: none !important;
       }
@@ -275,8 +345,23 @@
   <body>
     <div id="error" class="error" hidden></div>
 
-    <section id="listView">
+    <header id="top">
       <h1>Цели <span class="muted" id="count"></span></h1>
+      <div class="tabs">
+        <button type="button" class="tab active" id="tabTargets">📋 Модели</button>
+        <button type="button" class="tab" id="tabWatch">⭐ Слежу <span id="watchCount"></span></button>
+      </div>
+    </header>
+
+    <section id="watchView" hidden>
+      <div class="muted">
+        ПК сам открывает эти объявления раз в ~2 часа и сверяет цену — подешевеет, пришлю в чат. Зелёные — цена проходит
+        по порогу цели, серые — дороже. Добавить: модель → ⭐ у объявления или «⭐ Следить» под находкой.
+      </div>
+      <div id="watchList" style="margin-top: 10px"></div>
+    </section>
+
+    <section id="listView">
       <div class="muted" id="hint">
         Цена — до скольких ₽ покупать. Переключатель — слежу / пауза. Нажмите на модель — карточка.
       </div>
@@ -309,6 +394,10 @@
         at: null,
         view: null,
         nextNewId: -1,
+        tab: 'targets',
+        watched: [],
+        watchAdd: new Map(),
+        watchRemove: new Set(),
       };
       const $ = (id) => document.getElementById(id);
       const rub = (value) => Number(value).toLocaleString('ru-RU', { maximumFractionDigits: 2 }) + ' ₽';
@@ -365,6 +454,20 @@
         };
       }
 
+      function normalizeWatch(item) {
+        return {
+          id: item.id,
+          title: String(item.title),
+          priceRub: item.priceRub === null || item.priceRub === undefined ? null : Number(item.priceRub),
+          url: safeUrl(item.url),
+          img: safeUrl(item.img),
+          ok: Boolean(item.ok),
+          removed: Boolean(item.removed),
+          thresholdRub: item.thresholdRub || null,
+          targetName: item.targetName || null,
+        };
+      }
+
       /** Данные из ссылки кнопки: v2 (#z=, deflate-raw) или v1 (#t=, только цели). */
       async function fromHash() {
         const packed = /[#&]z=([A-Za-z0-9_-]+)/.exec(location.hash);
@@ -385,12 +488,26 @@
                 finds,
                 img: img || null,
                 stats: stats ? { count: stats[0], min: stats[1], median: stats[2], max: stats[3] } : null,
-                offers: (offers || []).map(([url, title, offerRub, offerImg]) => ({
+                offers: (offers || []).map(([url, title, offerRub, offerImg, listingId]) => ({
+                  id: listingId || null,
                   url,
                   title,
                   priceRub: offerRub,
                   img: offerImg || null,
                 })),
+              }),
+            ),
+            watched: (data.w || []).map(([id, title, priceRub, url, img, ok, removed, thresholdRub, targetName]) =>
+              normalizeWatch({
+                id,
+                title,
+                priceRub,
+                url,
+                img,
+                ok: ok === 1,
+                removed: removed === 1,
+                thresholdRub,
+                targetName,
               }),
             ),
           };
@@ -400,6 +517,7 @@
         const data = JSON.parse(new TextDecoder().decode(base64urlBytes(plain[1])));
         return {
           at: null,
+          watched: [],
           targets: data.t.map(([id, name, priceRub, active]) =>
             normalize({ id, name, priceRub, active: active === 1 }),
           ),
@@ -514,6 +632,81 @@
         }
       }
 
+      function isWatched(listingId) {
+        if (state.watchAdd.has(listingId)) return true;
+        return state.watched.some((item) => item.id === listingId) && !state.watchRemove.has(listingId);
+      }
+
+      /** ⭐ у объявления: следить (добавится при сохранении) или больше не следить. */
+      function toggleWatch(offer) {
+        if (!offer.id) return;
+        if (state.watchAdd.has(offer.id)) state.watchAdd.delete(offer.id);
+        else if (state.watched.some((item) => item.id === offer.id)) {
+          if (state.watchRemove.has(offer.id)) state.watchRemove.delete(offer.id);
+          else state.watchRemove.add(offer.id);
+        } else state.watchAdd.set(offer.id, offer);
+        haptic('select');
+        render();
+      }
+
+      function watchedCount() {
+        return state.watched.filter((item) => !state.watchRemove.has(item.id)).length + state.watchAdd.size;
+      }
+
+      function renderWatch() {
+        const list = $('watchList');
+        list.textContent = '';
+        const pending = [...state.watchAdd.values()].map((offer) => ({
+          id: offer.id,
+          title: offer.title,
+          priceRub: offer.priceRub,
+          url: offer.url,
+          img: offer.img,
+          ok: false,
+          removed: false,
+          adding: true,
+        }));
+        const items = pending.concat(state.watched);
+        if (items.length === 0) {
+          list.append(el('div', 'empty muted', 'Пока ни за чем не слежу. Откройте модель и нажмите ⭐ у объявления.'));
+        }
+        for (const item of items) {
+          const row = el('div', 'wrow');
+          if (item.ok) row.classList.add('ok');
+          if (item.removed) row.classList.add('removed');
+          if (item.adding) row.classList.add('adding');
+          if (state.watchRemove.has(item.id)) row.classList.add('pending');
+          const info = el('div', 'info');
+          info.append(el('div', 'name', item.title));
+          const sub = item.adding
+            ? 'добавится при сохранении'
+            : item.removed
+              ? 'снято с продажи'
+              : item.targetName
+                ? (item.ok ? 'проходит: «' : 'дороже порога: «') + item.targetName + '» до ' + rub(item.thresholdRub)
+                : 'цели с этой моделью нет';
+          info.append(el('div', 'sub', sub));
+          const cost = el(
+            'div',
+            'cost',
+            item.removed
+              ? '—'
+              : item.priceRub === null || item.priceRub === undefined
+                ? 'без цены'
+                : rub(item.priceRub),
+          );
+          const remove = el('button', 'ghost small', state.watchRemove.has(item.id) ? '↩' : '✕');
+          remove.type = 'button';
+          remove.addEventListener('click', (event) => {
+            event.stopPropagation();
+            toggleWatch(item);
+          });
+          row.append(thumb({ name: item.title, img: item.img }, 'thumb'), info, cost, remove);
+          row.addEventListener('click', () => openLink(item.url));
+          list.append(row);
+        }
+      }
+
       function renderDetail(target) {
         const view = $('detailView');
         view.textContent = '';
@@ -568,10 +761,24 @@
         if (target.offers.length > 0) {
           const offers = el('div', 'panel');
           offers.append(el('div', 'muted', 'Дешевле всего сейчас'));
+          offers.append(
+            el('div', 'muted', 'Зелёные — проходят по вашей цене. ⭐ — следить за ценой (ПК проверяет раз в ~2 ч).'),
+          );
           for (const offer of target.offers) {
             const item = el('div', 'offer');
+            if (offer.priceRub <= current(target).priceRub) item.classList.add('ok');
             if (offer.img) item.append(thumb({ name: offer.title, img: offer.img }, 'thumb'));
             item.append(el('div', 'title', offer.title), el('div', 'cost', rub(offer.priceRub)));
+            if (offer.id) {
+              const star = el('button', 'star' + (isWatched(offer.id) ? ' on' : ''), isWatched(offer.id) ? '★' : '☆');
+              star.type = 'button';
+              star.setAttribute('aria-label', 'Следить за ценой');
+              star.addEventListener('click', (event) => {
+                event.stopPropagation();
+                toggleWatch(offer);
+              });
+              item.append(star);
+            }
             item.addEventListener('click', () => openLink(offer.url));
             offers.append(item);
           }
@@ -595,14 +802,20 @@
       function render() {
         showError('');
         const target = state.view === null ? null : findTarget(state.view);
-        $('listView').hidden = Boolean(target);
+        $('top').hidden = Boolean(target);
+        $('listView').hidden = Boolean(target) || state.tab !== 'targets';
+        $('watchView').hidden = Boolean(target) || state.tab !== 'watch';
         $('detailView').hidden = !target;
+        $('tabTargets').classList.toggle('active', state.tab === 'targets');
+        $('tabWatch').classList.toggle('active', state.tab === 'watch');
+        $('watchCount').textContent = watchedCount() ? '(' + watchedCount() + ')' : '';
         if (target) {
           renderDetail(target);
           tg.BackButton.show();
         } else {
           state.view = null;
           renderList();
+          if (state.tab === 'watch') renderWatch();
           tg.BackButton.hide();
         }
         updateMainButton();
@@ -690,7 +903,9 @@
       }
 
       function pendingCount() {
-        return state.dirty.size + state.added.length + state.deleted.size;
+        return (
+          state.dirty.size + state.added.length + state.deleted.size + state.watchAdd.size + state.watchRemove.size
+        );
       }
 
       function updateMainButton() {
@@ -720,6 +935,8 @@
             n: state.added.map((target) => [target.name, target.priceRub]),
           };
           if (state.deleted.size > 0) data.d = [...state.deleted];
+          if (state.watchAdd.size > 0) data.w = [...state.watchAdd.keys()];
+          if (state.watchRemove.size > 0) data.u = [...state.watchRemove];
           if (typeof openId === 'number') data.o = openId;
           const payload = JSON.stringify(data);
           if (new TextEncoder().encode(payload).length > 4096)
@@ -740,9 +957,13 @@
             });
           }
           for (const id of state.deleted) await api('/api/targets/' + id + '/delete', { method: 'POST' });
+          for (const id of state.watchAdd.keys()) await api('/api/watch/' + id, { method: 'POST' });
+          for (const id of state.watchRemove) await api('/api/watch/' + id + '/delete', { method: 'POST' });
           state.dirty.clear();
           state.added = [];
           state.deleted.clear();
+          state.watchAdd.clear();
+          state.watchRemove.clear();
           haptic('success');
           await load();
         } catch (error) {
@@ -757,6 +978,7 @@
         const body = await api('/api/targets');
         state.at = body.at || null;
         state.targets = body.targets.map(normalize);
+        state.watched = (body.watched || []).map(normalizeWatch);
         render();
       }
 
@@ -765,6 +987,15 @@
         renderList();
       });
       $('allOn').addEventListener('click', () => setAll(true));
+      $('tabTargets').addEventListener('click', () => {
+        state.tab = 'targets';
+        render();
+      });
+      $('tabWatch').addEventListener('click', () => {
+        state.tab = 'watch';
+        haptic('select');
+        render();
+      });
       $('allOff').addEventListener('click', () => setAll(false));
 
       $('add').addEventListener('submit', (event) => {
@@ -804,6 +1035,7 @@
           state.offline = true;
           state.at = fromLink.at;
           state.targets = fromLink.targets;
+          state.watched = fromLink.watched;
           render();
         } else {
           load().catch((error) => showError('Не загрузилось: ' + error.message));
