@@ -1,0 +1,359 @@
+<!doctype html>
+<html lang="ru">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <title>Цели</title>
+    <script src="https://telegram.org/js/telegram-web-app.js"></script>
+    <style>
+      :root {
+        --bg: var(--tg-theme-bg-color, #ffffff);
+        --text: var(--tg-theme-text-color, #111111);
+        --hint: var(--tg-theme-hint-color, #8a8a8e);
+        --card: var(--tg-theme-secondary-bg-color, #f2f2f7);
+        --accent: var(--tg-theme-button-color, #2481cc);
+        --accent-text: var(--tg-theme-button-text-color, #ffffff);
+        --danger: var(--tg-theme-destructive-text-color, #e53935);
+      }
+      * {
+        box-sizing: border-box;
+      }
+      body {
+        margin: 0;
+        padding: 12px 14px 96px;
+        background: var(--bg);
+        color: var(--text);
+        font:
+          15px/1.35 -apple-system,
+          BlinkMacSystemFont,
+          'Segoe UI',
+          Roboto,
+          sans-serif;
+      }
+      h1 {
+        margin: 4px 0 10px;
+        font-size: 20px;
+      }
+      .muted {
+        color: var(--hint);
+        font-size: 13px;
+      }
+      input {
+        font: inherit;
+        color: var(--text);
+        background: var(--card);
+        border: 1px solid transparent;
+        border-radius: 10px;
+        padding: 9px 10px;
+        outline: none;
+      }
+      input:focus {
+        border-color: var(--accent);
+      }
+      .search {
+        width: 100%;
+        margin-bottom: 10px;
+      }
+      .add {
+        display: flex;
+        gap: 8px;
+        margin-bottom: 14px;
+      }
+      .add input[name='name'] {
+        flex: 1;
+        min-width: 0;
+      }
+      .add input[name='price'] {
+        width: 96px;
+      }
+      button {
+        font: inherit;
+        border: 0;
+        border-radius: 10px;
+        padding: 9px 12px;
+        background: var(--accent);
+        color: var(--accent-text);
+      }
+      .row {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        padding: 10px 12px;
+        margin-bottom: 8px;
+        background: var(--card);
+        border-radius: 12px;
+      }
+      .row.paused .name {
+        color: var(--hint);
+      }
+      .row.dirty {
+        box-shadow: inset 3px 0 0 var(--accent);
+      }
+      .name {
+        flex: 1;
+        min-width: 0;
+        overflow-wrap: anywhere;
+      }
+      .price {
+        display: flex;
+        align-items: center;
+        gap: 4px;
+      }
+      .price input {
+        width: 84px;
+        text-align: right;
+        background: var(--bg);
+      }
+      .switch {
+        position: relative;
+        width: 44px;
+        height: 26px;
+        flex: none;
+      }
+      .switch input {
+        opacity: 0;
+        width: 0;
+        height: 0;
+      }
+      .switch span {
+        position: absolute;
+        inset: 0;
+        border-radius: 13px;
+        background: var(--hint);
+        transition: background 0.15s;
+      }
+      .switch span::after {
+        content: '';
+        position: absolute;
+        top: 3px;
+        left: 3px;
+        width: 20px;
+        height: 20px;
+        border-radius: 50%;
+        background: #fff;
+        transition: transform 0.15s;
+      }
+      .switch input:checked + span {
+        background: var(--accent);
+      }
+      .switch input:checked + span::after {
+        transform: translateX(18px);
+      }
+      .error {
+        color: var(--danger);
+        margin: 8px 0;
+      }
+      .empty {
+        text-align: center;
+        padding: 30px 0;
+      }
+    </style>
+  </head>
+  <body>
+    <h1>Цели <span class="muted" id="count"></span></h1>
+    <p class="muted" id="hint">Цена — до скольких ₽ покупать. Переключатель — слежу / пауза.</p>
+    <div id="error" class="error" hidden></div>
+    <input class="search" id="search" type="search" placeholder="Поиск по названию" autocomplete="off" />
+    <form class="add" id="add">
+      <input name="name" placeholder="Новая модель" autocomplete="off" required />
+      <input name="price" type="number" inputmode="decimal" min="1" step="any" placeholder="₽" required />
+      <button type="submit">+</button>
+    </form>
+    <div id="list"></div>
+
+    <script>
+      const tg = window.Telegram && window.Telegram.WebApp;
+      // Два режима: данные в ссылке (#t=…, правки — боту через sendData; ПК снаружи не виден) или API через туннель.
+      const state = { targets: [], dirty: new Map(), added: [], filter: '', offline: false };
+      const $ = (id) => document.getElementById(id);
+
+      function showError(text) {
+        $('error').textContent = text;
+        $('error').hidden = !text;
+      }
+
+      async function api(path, options = {}) {
+        const response = await fetch(path, {
+          ...options,
+          headers: { 'Content-Type': 'application/json', Authorization: 'tma ' + tg.initData },
+        });
+        const body = await response.json().catch(() => ({}));
+        if (!response.ok) throw new Error(body.error || 'ошибка ' + response.status);
+        return body;
+      }
+
+      function fromHash() {
+        const match = /[#&]t=([A-Za-z0-9_-]+)/.exec(location.hash);
+        if (!match) return null;
+        const b64 = match[1].replace(/-/g, '+').replace(/_/g, '/');
+        const bytes = Uint8Array.from(atob(b64 + '='.repeat((4 - (b64.length % 4)) % 4)), (c) => c.charCodeAt(0));
+        const data = JSON.parse(new TextDecoder().decode(bytes));
+        return data.t.map(([id, name, priceRub, active]) => ({ id, name, priceRub, active: active === 1 }));
+      }
+
+      function render() {
+        const list = $('list');
+        list.textContent = '';
+        const filter = state.filter.trim().toLowerCase();
+        const all = state.targets.concat(state.added);
+        const shown = all.filter((t) => !filter || t.name.toLowerCase().includes(filter));
+        const active = state.targets.filter((t) => t.active).length;
+        $('count').textContent = active + ' из ' + state.targets.length;
+        if (shown.length === 0) {
+          const empty = document.createElement('div');
+          empty.className = 'empty muted';
+          empty.textContent = state.targets.length ? 'Ничего не нашлось' : 'Целей пока нет — добавьте первую';
+          list.append(empty);
+        }
+        for (const target of shown) {
+          const change = state.dirty.get(target.id) || {};
+          const price = change.priceRub ?? target.priceRub;
+          const isActive = change.active ?? target.active;
+          const row = document.createElement('div');
+          const isNew = target.id < 0;
+          row.className = 'row' + (isActive ? '' : ' paused') + (state.dirty.has(target.id) || isNew ? ' dirty' : '');
+          const name = document.createElement('div');
+          name.className = 'name';
+          name.textContent = target.name + (isNew ? ' (новая)' : '');
+          const priceBox = document.createElement('label');
+          priceBox.className = 'price';
+          const input = document.createElement('input');
+          input.type = 'number';
+          input.inputMode = 'decimal';
+          input.min = '1';
+          input.step = 'any';
+          input.value = String(price);
+          input.addEventListener('change', () => edit(target, { priceRub: Number(input.value) }));
+          priceBox.append(input, '₽');
+          const toggle = document.createElement('label');
+          toggle.className = 'switch';
+          const box = document.createElement('input');
+          box.type = 'checkbox';
+          box.checked = isActive;
+          box.addEventListener('change', () => edit(target, { active: box.checked }));
+          toggle.append(box, document.createElement('span'));
+          row.append(name, priceBox, toggle);
+          list.append(row);
+        }
+        updateMainButton();
+      }
+
+      function edit(target, patch) {
+        if (target.id < 0) {
+          // Новая (ещё не сохранённая) цель — правим её саму.
+          Object.assign(target, patch);
+          tg.HapticFeedback.selectionChanged();
+          return render();
+        }
+        const change = { ...(state.dirty.get(target.id) || {}), ...patch };
+        if (change.priceRub === target.priceRub) delete change.priceRub;
+        if (change.active === target.active) delete change.active;
+        if (Object.keys(change).length) state.dirty.set(target.id, change);
+        else state.dirty.delete(target.id);
+        tg.HapticFeedback.selectionChanged();
+        render();
+      }
+
+      function updateMainButton() {
+        const count = state.dirty.size + state.added.length;
+        if (count === 0) return tg.MainButton.hide();
+        tg.MainButton.setText('Сохранить (' + count + ')');
+        tg.MainButton.show();
+      }
+
+      async function save() {
+        const invalid = [...state.dirty.values()].find(
+          (change) => change.priceRub !== undefined && !(change.priceRub > 0),
+        );
+        if (invalid) return showError('Цена должна быть больше нуля');
+        if (state.offline) {
+          const payload = JSON.stringify({
+            v: 1,
+            c: [...state.dirty].map(([id, change]) => [
+              id,
+              change.priceRub ?? null,
+              change.active === undefined ? null : change.active ? 1 : 0,
+            ]),
+            n: state.added.map((target) => [target.name, target.priceRub]),
+          });
+          if (new TextEncoder().encode(payload).length > 4096)
+            return showError('Слишком много правок за раз — сохраните частями');
+          tg.sendData(payload); // Telegram закрывает приложение, бот применяет правки и присылает ответ
+          return;
+        }
+        tg.MainButton.showProgress();
+        try {
+          for (const [id, change] of state.dirty) {
+            await api('/api/targets/' + id, { method: 'POST', body: JSON.stringify(change) });
+          }
+          state.dirty.clear();
+          showError('');
+          tg.HapticFeedback.notificationOccurred('success');
+          await load();
+        } catch (error) {
+          showError('Не сохранилось: ' + error.message);
+          tg.HapticFeedback.notificationOccurred('error');
+        } finally {
+          tg.MainButton.hideProgress();
+        }
+      }
+
+      async function load() {
+        const body = await api('/api/targets');
+        state.targets = body.targets;
+        render();
+      }
+
+      $('search').addEventListener('input', (event) => {
+        state.filter = event.target.value;
+        render();
+      });
+
+      $('add').addEventListener('submit', async (event) => {
+        event.preventDefault();
+        const form = event.target;
+        const name = form.name.value.trim();
+        const priceRub = Number(form.price.value);
+        if (!name || !(priceRub > 0)) return showError('Нужны название и цена больше нуля');
+        if (state.offline) {
+          state.added.push({ id: -(state.added.length + 1), name, priceRub, active: true });
+          form.reset();
+          showError('');
+          tg.HapticFeedback.selectionChanged();
+          return render();
+        }
+        try {
+          await api('/api/targets', { method: 'POST', body: JSON.stringify({ name, priceRub }) });
+          form.reset();
+          showError('');
+          tg.HapticFeedback.notificationOccurred('success');
+          await load();
+        } catch (error) {
+          showError('Не добавилось: ' + error.message);
+        }
+      });
+
+      const fromLink = (() => {
+        try {
+          return fromHash();
+        } catch {
+          return null;
+        }
+      })();
+      if (!tg || (!fromLink && !tg.initData)) {
+        document.body.textContent = 'Откройте «Цели» кнопкой «📋 Цели» в чате с ботом.';
+      } else {
+        tg.ready();
+        tg.expand();
+        tg.MainButton.onClick(save);
+        if (fromLink) {
+          state.offline = true;
+          state.targets = fromLink;
+          render();
+        } else {
+          load().catch((error) => showError('Не загрузилось: ' + error.message));
+        }
+      }
+    </script>
+  </body>
+</html>
