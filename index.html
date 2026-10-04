@@ -13,6 +13,7 @@
         --card: var(--tg-theme-secondary-bg-color, #f2f2f7);
         --accent: var(--tg-theme-button-color, #2481cc);
         --accent-text: var(--tg-theme-button-text-color, #ffffff);
+        --link: var(--tg-theme-link-color, #2481cc);
         --danger: var(--tg-theme-destructive-text-color, #e53935);
       }
       * {
@@ -29,10 +30,16 @@
           'Segoe UI',
           Roboto,
           sans-serif;
+        -webkit-tap-highlight-color: transparent;
       }
       h1 {
-        margin: 4px 0 10px;
+        margin: 4px 0 2px;
         font-size: 20px;
+      }
+      h2 {
+        margin: 12px 0 4px;
+        font-size: 20px;
+        overflow-wrap: anywhere;
       }
       .muted {
         color: var(--hint);
@@ -50,9 +57,36 @@
       input:focus {
         border-color: var(--accent);
       }
+      button {
+        font: inherit;
+        border: 0;
+        border-radius: 10px;
+        padding: 9px 12px;
+        background: var(--accent);
+        color: var(--accent-text);
+        cursor: pointer;
+      }
+      button.ghost {
+        background: var(--card);
+        color: var(--text);
+      }
+      button.danger {
+        background: var(--card);
+        color: var(--danger);
+      }
       .search {
         width: 100%;
-        margin-bottom: 10px;
+        margin: 10px 0 8px;
+      }
+      .bulk {
+        display: flex;
+        gap: 8px;
+        margin-bottom: 8px;
+      }
+      .bulk button {
+        flex: 1;
+        padding: 8px 6px;
+        font-size: 14px;
       }
       .add {
         display: flex;
@@ -64,21 +98,13 @@
         min-width: 0;
       }
       .add input[name='price'] {
-        width: 96px;
-      }
-      button {
-        font: inherit;
-        border: 0;
-        border-radius: 10px;
-        padding: 9px 12px;
-        background: var(--accent);
-        color: var(--accent-text);
+        width: 86px;
       }
       .row {
         display: flex;
         align-items: center;
         gap: 10px;
-        padding: 10px 12px;
+        padding: 8px 10px;
         margin-bottom: 8px;
         background: var(--card);
         border-radius: 12px;
@@ -89,18 +115,55 @@
       .row.dirty {
         box-shadow: inset 3px 0 0 var(--accent);
       }
-      .name {
+      .row.deleted {
+        opacity: 0.55;
+      }
+      .row.deleted .name {
+        text-decoration: line-through;
+      }
+      .open {
+        display: flex;
+        align-items: center;
+        gap: 10px;
         flex: 1;
         min-width: 0;
+        cursor: pointer;
+      }
+      .thumb {
+        width: 44px;
+        height: 44px;
+        flex: none;
+        border-radius: 10px;
+        object-fit: cover;
+        background: var(--bg);
+      }
+      .placeholder {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-weight: 600;
+        color: #fff;
+      }
+      .info {
+        min-width: 0;
+        flex: 1;
+      }
+      .name {
         overflow-wrap: anywhere;
+      }
+      .sub {
+        color: var(--hint);
+        font-size: 12px;
+        margin-top: 1px;
       }
       .price {
         display: flex;
         align-items: center;
         gap: 4px;
+        flex: none;
       }
       .price input {
-        width: 84px;
+        width: 76px;
         text-align: right;
         background: var(--bg);
       }
@@ -147,29 +210,129 @@
         text-align: center;
         padding: 30px 0;
       }
+      .hero {
+        width: 100%;
+        aspect-ratio: 4 / 3;
+        border-radius: 14px;
+        object-fit: cover;
+        background: var(--card);
+        display: block;
+      }
+      .hero.placeholder {
+        font-size: 64px;
+      }
+      .panel {
+        background: var(--card);
+        border-radius: 12px;
+        padding: 10px 12px;
+        margin: 10px 0;
+      }
+      .panel .row {
+        background: transparent;
+        padding: 0;
+        margin: 0;
+      }
+      .stat {
+        display: flex;
+        justify-content: space-between;
+        gap: 12px;
+        padding: 3px 0;
+      }
+      .stat b {
+        font-weight: 600;
+      }
+      .offer {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        padding: 8px 0;
+        cursor: pointer;
+      }
+      .offer + .offer {
+        border-top: 1px solid var(--bg);
+      }
+      .offer .title {
+        flex: 1;
+        min-width: 0;
+        overflow-wrap: anywhere;
+        color: var(--link);
+      }
+      .offer .cost {
+        flex: none;
+        font-weight: 600;
+      }
+      .actions {
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
+        margin-top: 12px;
+      }
+      [hidden] {
+        display: none !important;
+      }
     </style>
   </head>
   <body>
-    <h1>Цели <span class="muted" id="count"></span></h1>
-    <p class="muted" id="hint">Цена — до скольких ₽ покупать. Переключатель — слежу / пауза.</p>
     <div id="error" class="error" hidden></div>
-    <input class="search" id="search" type="search" placeholder="Поиск по названию" autocomplete="off" />
-    <form class="add" id="add">
-      <input name="name" placeholder="Новая модель" autocomplete="off" required />
-      <input name="price" type="number" inputmode="decimal" min="1" step="any" placeholder="₽" required />
-      <button type="submit">+</button>
-    </form>
-    <div id="list"></div>
+
+    <section id="listView">
+      <h1>Цели <span class="muted" id="count"></span></h1>
+      <div class="muted" id="hint">
+        Цена — до скольких ₽ покупать. Переключатель — слежу / пауза. Нажмите на модель — карточка.
+      </div>
+      <input class="search" id="search" type="search" placeholder="Поиск по названию" autocomplete="off" />
+      <div class="bulk">
+        <button type="button" class="ghost" id="allOn">✅ Включить все</button>
+        <button type="button" class="ghost" id="allOff">⏸ Выключить все</button>
+      </div>
+      <form class="add" id="add">
+        <input name="name" placeholder="Новая модель" autocomplete="off" required />
+        <input name="price" type="number" inputmode="decimal" min="1" step="any" placeholder="₽" required />
+        <button type="submit">+</button>
+      </form>
+      <div id="list"></div>
+    </section>
+
+    <section id="detailView" hidden></section>
 
     <script>
       const tg = window.Telegram && window.Telegram.WebApp;
-      // Два режима: данные в ссылке (#t=…, правки — боту через sendData; ПК снаружи не виден) или API через туннель.
-      const state = { targets: [], dirty: new Map(), added: [], filter: '', offline: false };
+      // Два режима: данные в ссылке (#z=… сжато, #t=… старый формат; правки — боту через sendData; ПК снаружи
+      // не виден) или API через туннель (правки сразу).
+      const state = {
+        targets: [],
+        dirty: new Map(),
+        added: [],
+        deleted: new Set(),
+        filter: '',
+        offline: false,
+        at: null,
+        view: null,
+        nextNewId: -1,
+      };
       const $ = (id) => document.getElementById(id);
+      const rub = (value) => Number(value).toLocaleString('ru-RU', { maximumFractionDigits: 2 }) + ' ₽';
+      const safeUrl = (value) => (typeof value === 'string' && /^https:\/\//.test(value) ? value : null);
+
+      function el(tag, className, text) {
+        const node = document.createElement(tag);
+        if (className) node.className = className;
+        if (text !== undefined) node.textContent = text;
+        return node;
+      }
 
       function showError(text) {
         $('error').textContent = text;
         $('error').hidden = !text;
+      }
+
+      function haptic(kind) {
+        try {
+          if (kind === 'select') tg.HapticFeedback.selectionChanged();
+          else tg.HapticFeedback.notificationOccurred(kind);
+        } catch {
+          // вне Telegram вибрации нет
+        }
       }
 
       async function api(path, options = {}) {
@@ -182,67 +345,322 @@
         return body;
       }
 
-      function fromHash() {
-        const match = /[#&]t=([A-Za-z0-9_-]+)/.exec(location.hash);
-        if (!match) return null;
-        const b64 = match[1].replace(/-/g, '+').replace(/_/g, '/');
-        const bytes = Uint8Array.from(atob(b64 + '='.repeat((4 - (b64.length % 4)) % 4)), (c) => c.charCodeAt(0));
-        const data = JSON.parse(new TextDecoder().decode(bytes));
-        return data.t.map(([id, name, priceRub, active]) => ({ id, name, priceRub, active: active === 1 }));
+      function base64urlBytes(text) {
+        const b64 = text.replace(/-/g, '+').replace(/_/g, '/');
+        return Uint8Array.from(atob(b64 + '='.repeat((4 - (b64.length % 4)) % 4)), (c) => c.charCodeAt(0));
       }
 
-      function render() {
+      function normalize(target) {
+        return {
+          id: target.id,
+          name: String(target.name),
+          priceRub: Number(target.priceRub),
+          active: Boolean(target.active),
+          finds: Number(target.finds) || 0,
+          img: safeUrl(target.img),
+          stats: target.stats || null,
+          offers: (target.offers || [])
+            .map((offer) => ({ ...offer, url: safeUrl(offer.url), img: safeUrl(offer.img) }))
+            .filter((offer) => offer.url),
+        };
+      }
+
+      /** Данные из ссылки кнопки: v2 (#z=, deflate-raw) или v1 (#t=, только цели). */
+      async function fromHash() {
+        const packed = /[#&]z=([A-Za-z0-9_-]+)/.exec(location.hash);
+        if (packed) {
+          if (typeof DecompressionStream === 'undefined') throw new Error('обновите Telegram — нужен новее WebView');
+          const stream = new Blob([base64urlBytes(packed[1])])
+            .stream()
+            .pipeThrough(new DecompressionStream('deflate-raw'));
+          const data = JSON.parse(await new Response(stream).text());
+          return {
+            at: data.at || null,
+            targets: data.t.map(([id, name, priceRub, active, finds, img, stats, offers]) =>
+              normalize({
+                id,
+                name,
+                priceRub,
+                active: active === 1,
+                finds,
+                img: img || null,
+                stats: stats ? { count: stats[0], min: stats[1], median: stats[2], max: stats[3] } : null,
+                offers: (offers || []).map(([url, title, offerRub, offerImg]) => ({
+                  url,
+                  title,
+                  priceRub: offerRub,
+                  img: offerImg || null,
+                })),
+              }),
+            ),
+          };
+        }
+        const plain = /[#&]t=([A-Za-z0-9_-]+)/.exec(location.hash);
+        if (!plain) return null;
+        const data = JSON.parse(new TextDecoder().decode(base64urlBytes(plain[1])));
+        return {
+          at: null,
+          targets: data.t.map(([id, name, priceRub, active]) =>
+            normalize({ id, name, priceRub, active: active === 1 }),
+          ),
+        };
+      }
+
+      function current(target) {
+        const change = state.dirty.get(target.id) || {};
+        return {
+          priceRub: change.priceRub ?? target.priceRub,
+          active: change.active ?? target.active,
+        };
+      }
+
+      function thumb(target, className) {
+        const color = 'hsl(' + ([...target.name].reduce((sum, ch) => sum + ch.charCodeAt(0), 0) % 360) + ' 45% 50%)';
+        const placeholder = () => {
+          const box = el('div', className + ' placeholder', (target.name.trim()[0] || '?').toUpperCase());
+          box.style.background = color;
+          return box;
+        };
+        if (!target.img) return placeholder();
+        const img = el('img', className);
+        img.src = target.img;
+        img.alt = '';
+        img.loading = 'lazy';
+        img.decoding = 'async';
+        img.referrerPolicy = 'no-referrer';
+        img.addEventListener('error', () => img.replaceWith(placeholder()));
+        return img;
+      }
+
+      function priceBox(target) {
+        const box = el('label', 'price');
+        const input = el('input');
+        input.type = 'number';
+        input.inputMode = 'decimal';
+        input.min = '1';
+        input.step = 'any';
+        input.value = String(current(target).priceRub);
+        input.addEventListener('change', () => edit(target, { priceRub: Number(input.value) }));
+        box.append(input, '₽');
+        return box;
+      }
+
+      function toggle(target) {
+        const label = el('label', 'switch');
+        const box = el('input');
+        box.type = 'checkbox';
+        box.checked = current(target).active;
+        box.addEventListener('change', () => edit(target, { active: box.checked }));
+        label.append(box, el('span'));
+        return label;
+      }
+
+      function subline(target) {
+        const parts = [];
+        if (target.stats) parts.push('медиана ' + rub(target.stats.median) + ' · ' + target.stats.count + ' объявл.');
+        if (target.finds > 0) parts.push('находок ' + target.finds);
+        if (target.id < 0) parts.push('новая');
+        return parts.join(' · ');
+      }
+
+      function renderList() {
         const list = $('list');
         list.textContent = '';
         const filter = state.filter.trim().toLowerCase();
         const all = state.targets.concat(state.added);
         const shown = all.filter((t) => !filter || t.name.toLowerCase().includes(filter));
-        const active = state.targets.filter((t) => t.active).length;
-        $('count').textContent = active + ' из ' + state.targets.length;
+        const kept = state.targets.filter((t) => !state.deleted.has(t.id));
+        $('count').textContent = kept.filter((t) => current(t).active).length + ' из ' + kept.length;
+        if (state.at) {
+          const at = new Date(state.at * 1000).toLocaleString('ru-RU', {
+            day: '2-digit',
+            month: '2-digit',
+            hour: '2-digit',
+            minute: '2-digit',
+          });
+          $('hint').textContent = 'Данные на ' + at + '. Нажмите на модель — карточка: фото, цены, объявления.';
+        }
         if (shown.length === 0) {
-          const empty = document.createElement('div');
-          empty.className = 'empty muted';
-          empty.textContent = state.targets.length ? 'Ничего не нашлось' : 'Целей пока нет — добавьте первую';
-          list.append(empty);
+          list.append(el('div', 'empty muted', all.length ? 'Ничего не нашлось' : 'Целей пока нет — добавьте первую'));
         }
         for (const target of shown) {
-          const change = state.dirty.get(target.id) || {};
-          const price = change.priceRub ?? target.priceRub;
-          const isActive = change.active ?? target.active;
-          const row = document.createElement('div');
-          const isNew = target.id < 0;
-          row.className = 'row' + (isActive ? '' : ' paused') + (state.dirty.has(target.id) || isNew ? ' dirty' : '');
-          const name = document.createElement('div');
-          name.className = 'name';
-          name.textContent = target.name + (isNew ? ' (новая)' : '');
-          const priceBox = document.createElement('label');
-          priceBox.className = 'price';
-          const input = document.createElement('input');
-          input.type = 'number';
-          input.inputMode = 'decimal';
-          input.min = '1';
-          input.step = 'any';
-          input.value = String(price);
-          input.addEventListener('change', () => edit(target, { priceRub: Number(input.value) }));
-          priceBox.append(input, '₽');
-          const toggle = document.createElement('label');
-          toggle.className = 'switch';
-          const box = document.createElement('input');
-          box.type = 'checkbox';
-          box.checked = isActive;
-          box.addEventListener('change', () => edit(target, { active: box.checked }));
-          toggle.append(box, document.createElement('span'));
-          row.append(name, priceBox, toggle);
+          const deleted = state.deleted.has(target.id);
+          const now = current(target);
+          const row = el('div', 'row');
+          if (!now.active) row.classList.add('paused');
+          if (state.dirty.has(target.id) || target.id < 0) row.classList.add('dirty');
+          if (deleted) row.classList.add('deleted');
+          const open = el('div', 'open');
+          const info = el('div', 'info');
+          info.append(el('div', 'name', target.name));
+          const sub = subline(target);
+          if (sub) info.append(el('div', 'sub', sub));
+          open.append(thumb(target, 'thumb'), info);
+          open.addEventListener('click', () => showDetail(target.id));
+          row.append(open);
+          if (deleted) {
+            const undo = el('button', 'ghost', '↩ Вернуть');
+            undo.type = 'button';
+            undo.addEventListener('click', () => {
+              state.deleted.delete(target.id);
+              haptic('select');
+              render();
+            });
+            row.append(undo);
+          } else {
+            row.append(priceBox(target), toggle(target));
+          }
           list.append(row);
         }
+      }
+
+      function renderDetail(target) {
+        const view = $('detailView');
+        view.textContent = '';
+        const deleted = state.deleted.has(target.id);
+        const first = target.offers[0];
+        const hero = thumb(target, 'hero');
+        if (first) {
+          hero.style.cursor = 'pointer';
+          hero.addEventListener('click', () => openLink(first.url));
+        }
+        view.append(hero, el('h2', '', target.name));
+        if (deleted) view.append(el('div', 'error', 'Будет удалена при сохранении.'));
+
+        const controls = el('div', 'panel');
+        const row = el('div', 'row');
+        if (!current(target).active) row.classList.add('paused');
+        const label = el('div', 'info');
+        label.append(el('div', 'name', 'Покупать до'), el('div', 'sub', current(target).active ? 'слежу' : 'на паузе'));
+        row.append(label, priceBox(target), toggle(target));
+        controls.append(row);
+        view.append(controls);
+
+        const stats = el('div', 'panel');
+        const line = (name, value) => {
+          const item = el('div', 'stat');
+          item.append(el('span', 'muted', name), el('b', '', value));
+          stats.append(item);
+        };
+        if (target.stats) {
+          line('Объявлений за 30 дней', String(target.stats.count));
+          line('Цены', rub(target.stats.min) + ' – ' + rub(target.stats.max));
+          line('Медиана', rub(target.stats.median));
+          const diff = Math.round(((target.stats.median - current(target).priceRub) * 100) / target.stats.median);
+          line(
+            'Ваш порог',
+            diff > 0 ? 'ниже медианы на ' + diff + ' %' : diff < 0 ? 'выше медианы на ' + -diff + ' %' : 'на медиане',
+          );
+        } else {
+          stats.append(
+            el(
+              'div',
+              'muted',
+              target.id < 0
+                ? 'Новая модель — сводка появится после сохранения.'
+                : 'Объявлений с этой моделью за 30 дней пока нет (или они не поместились в ссылку — смотрите в чате).',
+            ),
+          );
+        }
+        line('Находок прислано', String(target.finds));
+        view.append(stats);
+
+        if (target.offers.length > 0) {
+          const offers = el('div', 'panel');
+          offers.append(el('div', 'muted', 'Дешевле всего сейчас'));
+          for (const offer of target.offers) {
+            const item = el('div', 'offer');
+            if (offer.img) item.append(thumb({ name: offer.title, img: offer.img }, 'thumb'));
+            item.append(el('div', 'title', offer.title), el('div', 'cost', rub(offer.priceRub)));
+            item.addEventListener('click', () => openLink(offer.url));
+            offers.append(item);
+          }
+          view.append(offers);
+        }
+
+        const actions = el('div', 'actions');
+        if (state.offline && target.id > 0) {
+          const chat = el('button', '', '📈 История цен и все объявления — в чат');
+          chat.type = 'button';
+          chat.addEventListener('click', () => save(target.id));
+          actions.append(chat);
+        }
+        const remove = el('button', 'danger', deleted ? '↩ Не удалять' : '🗑 Удалить цель');
+        remove.type = 'button';
+        remove.addEventListener('click', () => toggleDelete(target));
+        actions.append(remove);
+        view.append(actions);
+      }
+
+      function render() {
+        showError('');
+        const target = state.view === null ? null : findTarget(state.view);
+        $('listView').hidden = Boolean(target);
+        $('detailView').hidden = !target;
+        if (target) {
+          renderDetail(target);
+          tg.BackButton.show();
+        } else {
+          state.view = null;
+          renderList();
+          tg.BackButton.hide();
+        }
         updateMainButton();
+      }
+
+      function findTarget(id) {
+        return state.targets.concat(state.added).find((t) => t.id === id) || null;
+      }
+
+      function showDetail(id) {
+        state.view = id;
+        haptic('select');
+        render();
+        window.scrollTo(0, 0);
+      }
+
+      function openLink(url) {
+        if (!url) return;
+        try {
+          tg.openLink(url);
+        } catch {
+          window.open(url, '_blank', 'noopener');
+        }
+      }
+
+      function toggleDelete(target) {
+        if (target.id < 0) {
+          state.added = state.added.filter((t) => t !== target);
+          state.view = null;
+          haptic('select');
+          return render();
+        }
+        if (state.deleted.has(target.id)) {
+          state.deleted.delete(target.id);
+          haptic('select');
+          return render();
+        }
+        const apply = (ok) => {
+          if (!ok) return;
+          state.deleted.add(target.id);
+          state.dirty.delete(target.id);
+          state.view = null;
+          haptic('warning');
+          render();
+        };
+        const question = 'Удалить «' + target.name + '»? Находки и история цен останутся. Удалится при сохранении.';
+        try {
+          tg.showConfirm(question, apply);
+        } catch {
+          apply(window.confirm(question));
+        }
       }
 
       function edit(target, patch) {
         if (target.id < 0) {
           // Новая (ещё не сохранённая) цель — правим её саму.
           Object.assign(target, patch);
-          tg.HapticFeedback.selectionChanged();
+          haptic('select');
           return render();
         }
         const change = { ...(state.dirty.get(target.id) || {}), ...patch };
@@ -250,32 +668,60 @@
         if (change.active === target.active) delete change.active;
         if (Object.keys(change).length) state.dirty.set(target.id, change);
         else state.dirty.delete(target.id);
-        tg.HapticFeedback.selectionChanged();
+        haptic('select');
         render();
       }
 
+      function setAll(active) {
+        const filter = state.filter.trim().toLowerCase();
+        for (const target of state.targets.concat(state.added)) {
+          if (state.deleted.has(target.id)) continue;
+          if (filter && !target.name.toLowerCase().includes(filter)) continue;
+          if (target.id < 0) target.active = active;
+          else {
+            const change = { ...(state.dirty.get(target.id) || {}), active };
+            if (change.active === target.active) delete change.active;
+            if (Object.keys(change).length) state.dirty.set(target.id, change);
+            else state.dirty.delete(target.id);
+          }
+        }
+        haptic('select');
+        render();
+      }
+
+      function pendingCount() {
+        return state.dirty.size + state.added.length + state.deleted.size;
+      }
+
       function updateMainButton() {
-        const count = state.dirty.size + state.added.length;
+        const count = pendingCount();
         if (count === 0) return tg.MainButton.hide();
         tg.MainButton.setText('Сохранить (' + count + ')');
         tg.MainButton.show();
       }
 
-      async function save() {
+      /** Сохранить. openId — после сохранения бот пришлёт в чат карточку этой цели. */
+      async function save(openId) {
         const invalid = [...state.dirty.values()].find(
           (change) => change.priceRub !== undefined && !(change.priceRub > 0),
         );
         if (invalid) return showError('Цена должна быть больше нуля');
+        if (state.added.some((t) => !(t.priceRub > 0))) return showError('Цена новой модели должна быть больше нуля');
         if (state.offline) {
-          const payload = JSON.stringify({
+          const data = {
             v: 1,
-            c: [...state.dirty].map(([id, change]) => [
-              id,
-              change.priceRub ?? null,
-              change.active === undefined ? null : change.active ? 1 : 0,
-            ]),
+            c: [...state.dirty]
+              .filter(([id]) => !state.deleted.has(id))
+              .map(([id, change]) => [
+                id,
+                change.priceRub ?? null,
+                change.active === undefined ? null : change.active ? 1 : 0,
+              ]),
             n: state.added.map((target) => [target.name, target.priceRub]),
-          });
+          };
+          if (state.deleted.size > 0) data.d = [...state.deleted];
+          if (typeof openId === 'number') data.o = openId;
+          const payload = JSON.stringify(data);
           if (new TextEncoder().encode(payload).length > 4096)
             return showError('Слишком много правок за раз — сохраните частями');
           tg.sendData(payload); // Telegram закрывает приложение, бот применяет правки и присылает ответ
@@ -284,15 +730,24 @@
         tg.MainButton.showProgress();
         try {
           for (const [id, change] of state.dirty) {
+            if (state.deleted.has(id)) continue;
             await api('/api/targets/' + id, { method: 'POST', body: JSON.stringify(change) });
           }
+          for (const target of state.added) {
+            await api('/api/targets', {
+              method: 'POST',
+              body: JSON.stringify({ name: target.name, priceRub: target.priceRub }),
+            });
+          }
+          for (const id of state.deleted) await api('/api/targets/' + id + '/delete', { method: 'POST' });
           state.dirty.clear();
-          showError('');
-          tg.HapticFeedback.notificationOccurred('success');
+          state.added = [];
+          state.deleted.clear();
+          haptic('success');
           await load();
         } catch (error) {
           showError('Не сохранилось: ' + error.message);
-          tg.HapticFeedback.notificationOccurred('error');
+          haptic('error');
         } finally {
           tg.MainButton.hideProgress();
         }
@@ -300,60 +755,62 @@
 
       async function load() {
         const body = await api('/api/targets');
-        state.targets = body.targets;
+        state.at = body.at || null;
+        state.targets = body.targets.map(normalize);
         render();
       }
 
       $('search').addEventListener('input', (event) => {
         state.filter = event.target.value;
+        renderList();
+      });
+      $('allOn').addEventListener('click', () => setAll(true));
+      $('allOff').addEventListener('click', () => setAll(false));
+
+      $('add').addEventListener('submit', (event) => {
+        event.preventDefault();
+        const form = event.target;
+        const name = form.elements.name.value.trim();
+        const priceRub = Number(form.elements.price.value);
+        if (!name || !(priceRub > 0)) return showError('Нужны название и цена больше нуля');
+        state.added.push(normalize({ id: state.nextNewId--, name, priceRub, active: true }));
+        form.reset();
+        haptic('select');
         render();
       });
 
-      $('add').addEventListener('submit', async (event) => {
-        event.preventDefault();
-        const form = event.target;
-        const name = form.name.value.trim();
-        const priceRub = Number(form.price.value);
-        if (!name || !(priceRub > 0)) return showError('Нужны название и цена больше нуля');
-        if (state.offline) {
-          state.added.push({ id: -(state.added.length + 1), name, priceRub, active: true });
-          form.reset();
-          showError('');
-          tg.HapticFeedback.selectionChanged();
-          return render();
-        }
+      async function start() {
+        let fromLink = null;
         try {
-          await api('/api/targets', { method: 'POST', body: JSON.stringify({ name, priceRub }) });
-          form.reset();
-          showError('');
-          tg.HapticFeedback.notificationOccurred('success');
-          await load();
+          fromLink = await fromHash();
         } catch (error) {
-          showError('Не добавилось: ' + error.message);
+          if (/[#&][zt]=/.test(location.hash)) {
+            document.body.textContent = 'Не удалось прочитать список: ' + error.message;
+            return;
+          }
         }
-      });
-
-      const fromLink = (() => {
-        try {
-          return fromHash();
-        } catch {
-          return null;
+        if (!tg || (!fromLink && !tg.initData)) {
+          document.body.textContent = 'Откройте «Цели» кнопкой «📋 Цели» в чате с ботом.';
+          return;
         }
-      })();
-      if (!tg || (!fromLink && !tg.initData)) {
-        document.body.textContent = 'Откройте «Цели» кнопкой «📋 Цели» в чате с ботом.';
-      } else {
         tg.ready();
         tg.expand();
-        tg.MainButton.onClick(save);
+        tg.MainButton.onClick(() => save());
+        tg.BackButton.onClick(() => {
+          state.view = null;
+          render();
+        });
         if (fromLink) {
           state.offline = true;
-          state.targets = fromLink;
+          state.at = fromLink.at;
+          state.targets = fromLink.targets;
           render();
         } else {
           load().catch((error) => showError('Не загрузилось: ' + error.message));
         }
       }
+
+      start();
     </script>
   </body>
 </html>
