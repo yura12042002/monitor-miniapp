@@ -519,6 +519,29 @@
         padding: 7px 10px;
         font-size: 14px;
       }
+      /* Открыто кнопкой закреплённого сообщения: только просмотр (sendData оттуда не работает). */
+      .ro {
+        background: var(--card);
+        border-radius: 10px;
+        padding: 8px 12px;
+        margin: 4px 0 8px;
+        font-size: 14px;
+      }
+      input:disabled {
+        opacity: 0.6;
+      }
+      .switch input:disabled + span {
+        opacity: 0.45;
+      }
+      .qtable td.good {
+        color: var(--good-text);
+      }
+      .qtable td.bad {
+        color: var(--danger);
+      }
+      .qtable .sub {
+        white-space: nowrap;
+      }
       /*
        * Находка подходит сейчас (решение владельца 05.10.2026, образец «как прямой эфир»): ровная красная точка, от неё
        * расходится и гаснет тень (1,6 с). Данные обновились и находки нет — нет и точки. Без анимации — просто точка.
@@ -661,6 +684,7 @@
         <span id="staleText"></span>
         <button type="button" id="refresh">🔄 Обновить</button>
       </div>
+      <div id="readonly" class="ro" hidden>👀 Только просмотр. Править цены — кнопкой «📋 Цели» внизу чата.</div>
       <h1>Цели <span class="muted" id="count"></span></h1>
       <div class="tabs">
         <button type="button" class="tab active" id="tabTargets">📋 Модели <span id="tabLive"></span></button>
@@ -685,7 +709,7 @@
         Цена — до скольких ₽ покупать. Переключатель — слежу / пауза. Нажмите на модель — карточка.
       </div>
       <input class="search" id="search" type="search" placeholder="Поиск по названию" autocomplete="off" />
-      <div class="bulk">
+      <div class="bulk" id="bulk">
         <button type="button" class="ghost" id="allOn">✅ Включить все</button>
         <button type="button" class="ghost" id="allOff">⏸ Выключить все</button>
       </div>
@@ -724,11 +748,16 @@
         finds: [],
         // Страницу объявления открыли из блока находок: «Назад» — сразу к списку.
         findBack: false,
+        // Открыто кнопкой закреплённого сообщения: sendData не работает — правок нет, только просмотр.
+        readOnly: false,
       };
       const $ = (id) => document.getElementById(id);
       // Данные из ссылки старше этого — плашка «могли измениться» с кнопкой «🔄 Обновить»: цели правят несколько
       // администраторов, а ссылка кнопки обновляется только с новым сообщением бота.
       const STALE_MINUTES = 30;
+      // Столько ждём, что Telegram закроет приложение после sendData; не закрыл — правки не ушли.
+      const SEND_DATA_WAIT_MS = 5000;
+      const READ_ONLY_HINT = 'Править цены — кнопкой «📋 Цели» внизу чата.';
       const rub = (value) => Number(value).toLocaleString('ru-RU', { maximumFractionDigits: 2 }) + ' ₽';
       const safeUrl = (value) => (typeof value === 'string' && /^https:\/\//.test(value) ? value : null);
 
@@ -871,6 +900,15 @@
       function dashboardFrom(d) {
         if (!d) return null;
         const [runs, ok, blocked, failed, found, fresh, finds, discoveries] = d.s || [];
+        // x — Avito за сутки по выходам (с 05.10.2026): [сервер | «напрямую», IP | 0, обходов, удачных, блоков, ошибок]
+        const exits = (d.x || []).map(([label, ip, xRuns, xOk, xBlocked, xFailed]) => ({
+          label: String(label),
+          ip: ip || null,
+          runs: Number(xRuns) || 0,
+          ok: Number(xOk) || 0,
+          blocked: Number(xBlocked) || 0,
+          failed: Number(xFailed) || 0,
+        }));
         return {
           day: { runs, ok, blocked, failed, found, fresh, finds, discoveries },
           listings: d.n || 0,
@@ -883,7 +921,8 @@
             found: qFound,
             fresh: qFresh,
           })),
-          recent: (d.r || []).map(([at, label, watch, code, rFound, rFresh, seconds]) => ({
+          exits,
+          recent: (d.r || []).map(([at, label, watch, code, rFound, rFresh, seconds, exit]) => ({
             at,
             label,
             watch: watch === 1,
@@ -891,8 +930,26 @@
             found: rFound,
             fresh: rFresh,
             seconds,
+            // Через что грузилась страница Avito — строка x; -1 (не Avito) и в ссылках старее 05.10.2026 — ничего.
+            exit: exit >= 0 ? exits[exit] || null : null,
           })),
         };
+      }
+
+      /** Выход обхода Avito: «через ru-02 · 93.183.81.88» или «напрямую». */
+      function exitText(exit) {
+        if (exit.label === 'напрямую') return 'напрямую';
+        return 'через ' + exit.label + (exit.ip ? ' · ' + exit.ip : '');
+      }
+
+      /**
+       * Открыто inline-кнопкой (табло «🔴 Подходят сейчас» — «📊 Открыть свежие данные») или из меню бота: у такого
+       * запуска есть query_id, а sendData Telegram принимает только у приложения, открытого кнопкой клавиатуры
+       * («📋 Цели» внизу чата). Клиента, который query_id не дал, ловит save(): приложение не закрылось после sendData.
+       */
+      function openedInline() {
+        const unsafe = tg.initDataUnsafe || {};
+        return Boolean(unsafe.query_id) || /(^|&)query_id=/.test(tg.initData || '');
       }
 
       /**
@@ -1036,6 +1093,7 @@
         input.min = '1';
         input.step = 'any';
         input.value = String(current(target).priceRub);
+        input.disabled = state.readOnly;
         input.addEventListener('change', () => edit(target, { priceRub: Number(input.value) }));
         box.append(input, '₽');
         return box;
@@ -1046,6 +1104,7 @@
         const box = el('input');
         box.type = 'checkbox';
         box.checked = current(target).active;
+        box.disabled = state.readOnly;
         box.addEventListener('change', () => edit(target, { active: box.checked }));
         label.append(box, el('span'));
         return label;
@@ -1155,8 +1214,10 @@
         const stale = state.offline && state.at && Date.now() - state.at * 1000 > STALE_MINUTES * 60_000;
         $('stale').hidden = !stale;
         if (!stale) return;
-        $('staleText').textContent =
-          'Данные на ' + dataTime(state.at) + ' — могли измениться (другой администратор мог поправить цены).';
+        // Только просмотр: «🔄 Обновить» шлёт sendData — не сработает; свежие данные — в кнопке, открытой заново.
+        const why = state.readOnly ? 'закройте и откройте снова' : 'другой администратор мог поправить цены';
+        $('staleText').textContent = 'Данные на ' + dataTime(state.at) + ' — могли измениться (' + why + ').';
+        $('refresh').hidden = state.readOnly;
         // Несохранённые правки уходят вместе с обновлением — как при «Сохранить».
         $('refresh').textContent = pendingCount() ? '🔄 Сохранить и обновить' : '🔄 Обновить';
       }
@@ -1224,7 +1285,7 @@
 
       /** ⭐ у объявления: следить (добавится при сохранении) или больше не следить. */
       function toggleWatch(offer) {
-        if (!offer.id) return;
+        if (!offer.id || state.readOnly) return;
         if (state.watchAdd.has(offer.id)) state.watchAdd.delete(offer.id);
         else if (state.watched.some((item) => item.id === offer.id)) {
           if (state.watchRemove.has(offer.id)) state.watchRemove.delete(offer.id);
@@ -1288,7 +1349,8 @@
           });
           const image = { name: item.title, img: item.img };
           const live = !item.removed && liveFind(item.id);
-          row.append(live ? liveThumb(image) : thumb(image, 'thumb'), info, cost, remove);
+          row.append(live ? liveThumb(image) : thumb(image, 'thumb'), info, cost);
+          if (!state.readOnly) row.append(remove);
           row.addEventListener('click', () => (item.adding ? openLink(item.url) : showWatchItem(item.id)));
           list.append(row);
         }
@@ -1314,6 +1376,7 @@
         label.append(el('div', 'name', 'Покупать до'), el('div', 'sub', current(target).active ? 'слежу' : 'на паузе'));
         row.append(label, priceBox(target), toggle(target));
         controls.append(row);
+        if (state.readOnly) controls.append(el('div', 'sub', READ_ONLY_HINT));
         view.append(controls);
 
         const stats = el('div', 'panel');
@@ -1382,7 +1445,7 @@
               : 'с ' + minuteDate(listing.firstSeen) + (listing.trail.length > 1 ? ' · цена менялась' : '');
           info.append(el('div', 'when', when));
           item.append(info, el('div', 'cost', listing.priceRub === null ? '—' : rub(listing.priceRub)));
-          if (listing.id && !listing.removed) {
+          if (listing.id && !listing.removed && !state.readOnly) {
             const star = el('button', 'star' + (isWatched(listing.id) ? ' on' : ''), isWatched(listing.id) ? '★' : '☆');
             star.type = 'button';
             star.setAttribute('aria-label', 'Следить за ценой');
@@ -1404,16 +1467,19 @@
         view.append(listingsPanel);
 
         const actions = el('div', 'actions');
-        if (state.offline && target.id > 0) {
+        // Только просмотр: «в чат» — тоже sendData, удаление — правка
+        if (state.offline && target.id > 0 && !state.readOnly) {
           const chat = el('button', '', '📈 История цен и все объявления — в чат');
           chat.type = 'button';
           chat.addEventListener('click', () => save({ openId: target.id }));
           actions.append(chat);
         }
-        const remove = el('button', 'danger', deleted ? '↩ Не удалять' : '🗑 Удалить цель');
-        remove.type = 'button';
-        remove.addEventListener('click', () => toggleDelete(target));
-        actions.append(remove);
+        if (!state.readOnly) {
+          const remove = el('button', 'danger', deleted ? '↩ Не удалять' : '🗑 Удалить цель');
+          remove.type = 'button';
+          remove.addEventListener('click', () => toggleDelete(target));
+          actions.append(remove);
+        }
         view.append(actions);
       }
 
@@ -1508,13 +1574,13 @@
         open.type = 'button';
         open.addEventListener('click', () => openLink(listing.url));
         actions.append(open);
-        if (listing.id && !listing.removed) {
+        if (listing.id && !listing.removed && !state.readOnly) {
           const star = el('button', 'ghost', isWatched(listing.id) ? '✕ Не следить за ценой' : '⭐ Следить за ценой');
           star.type = 'button';
           star.addEventListener('click', () => toggleWatch(listing));
           actions.append(star);
         }
-        if (state.offline && listing.id) {
+        if (state.offline && listing.id && !state.readOnly) {
           const chat = el('button', 'ghost', '📈 Вся история и проверки ПК — в чат');
           chat.type = 'button';
           chat.addEventListener('click', () => save({ historyId: listing.id }));
@@ -1534,9 +1600,14 @@
         return ['✓ выдача', 'пусто', '⏸ блок', '✗ ошибка', '… идёт'][code] || '?';
       }
 
-      /** «🧠 Сводка рынка от ИИ»: в режиме ссылки — кнопка (sendData с правками, бот пришлёт сводку), иначе — /brief. */
+      /**
+       * «🧠 Сводка рынка от ИИ»: в режиме ссылки — кнопка (sendData с правками, бот пришлёт сводку), иначе (и только
+       * просмотр — sendData не сработает) — /brief.
+       */
       function briefAction() {
-        if (!state.offline) return el('div', 'muted', '🧠 Сводка рынка от ИИ — команда /brief в чате с ботом.');
+        if (!state.offline || state.readOnly) {
+          return el('div', 'muted', '🧠 Сводка рынка от ИИ — команда /brief в чате с ботом.');
+        }
         const button = el('button', 'brief', '🧠 Сводка рынка от ИИ — в чат');
         button.type = 'button';
         button.addEventListener('click', () => save({ brief: true }));
@@ -1599,6 +1670,34 @@
           view.append(panel);
         }
 
+        // Avito по выходам (решение владельца 05.10.2026) — видно, помогают ли российские серверы. Выход без обходов
+        // за сутки — только у старых обходов из списка ниже.
+        const exits = d.exits.filter((exit) => exit.runs > 0);
+        if (exits.length > 0) {
+          const panel = el('div', 'panel');
+          panel.append(el('div', 'muted', 'Через что ходили (сутки)'));
+          const table = el('table', 'qtable');
+          const head = el('tr');
+          for (const title of ['Сервер, IP', 'Обходов', 'Удачно', 'Блоков']) head.append(el('th', '', title));
+          table.append(head);
+          for (const exit of exits) {
+            const where = el('td', '', exit.label);
+            if (exit.ip) where.append(el('div', 'sub', exit.ip));
+            const percent = Math.round((exit.ok * 100) / exit.runs);
+            const tr = el('tr');
+            tr.append(
+              where,
+              el('td', 'n', String(exit.runs)),
+              el('td', 'n' + (percent >= 80 ? ' good' : percent < 50 ? ' bad' : ''), percent + ' %'),
+              el('td', 'n' + (exit.blocked ? ' bad' : ''), String(exit.blocked)),
+            );
+            table.append(tr);
+          }
+          const note = 'Только Avito. Загрузка сорвалась — ПК повторяет через следующий сервер.';
+          panel.append(table, el('div', 'muted', note));
+          view.append(panel);
+        }
+
         const list = el('div', 'panel');
         list.append(el('div', 'muted', 'Последние обходы (новые сверху)'));
         if (d.recent.length === 0) list.append(el('div', 'muted', 'Обходов ещё не было.'));
@@ -1611,6 +1710,7 @@
               ? ''
               : ' · ' + run.found + ' объявл.' + (run.fresh ? ', ' + run.fresh + ' новых' : '');
           what.append(el('div', 'sub', statusText(run.code) + found + (run.seconds ? ' · ' + run.seconds + ' с' : '')));
+          if (run.exit) what.append(el('div', 'sub', exitText(run.exit)));
           row.append(el('div', 'when', minuteDate(run.at)), what);
           list.append(row);
         }
@@ -1648,6 +1748,9 @@
         if (!watchItem) state.watchItem = null;
         const page = Boolean(target || watchItem);
         $('top').hidden = page;
+        $('readonly').hidden = !state.readOnly;
+        $('bulk').hidden = state.readOnly;
+        $('add').hidden = state.readOnly;
         $('listView').hidden = page || state.tab !== 'targets';
         $('watchView').hidden = page || state.tab !== 'watch';
         $('statsView').hidden = page || state.tab !== 'stats';
@@ -1702,6 +1805,7 @@
       }
 
       function toggleDelete(target) {
+        if (state.readOnly) return;
         if (target.id < 0) {
           state.added = state.added.filter((t) => t !== target);
           state.view = null;
@@ -1730,6 +1834,7 @@
       }
 
       function edit(target, patch) {
+        if (state.readOnly) return;
         if (target.id < 0) {
           // Новая (ещё не сохранённая) цель — правим её саму.
           Object.assign(target, patch);
@@ -1746,6 +1851,7 @@
       }
 
       function setAll(active) {
+        if (state.readOnly) return;
         const filter = state.filter.trim().toLowerCase();
         for (const target of state.targets.concat(state.added)) {
           if (state.deleted.has(target.id)) continue;
@@ -1770,7 +1876,7 @@
 
       function updateMainButton() {
         const count = pendingCount();
-        if (count === 0) return tg.MainButton.hide();
+        if (count === 0 || state.readOnly) return tg.MainButton.hide();
         tg.MainButton.setText('Сохранить (' + count + ')');
         tg.MainButton.show();
       }
@@ -1780,6 +1886,7 @@
        * refresh — свежую кнопку «📋 Цели» (данные в ссылке устарели; правки, если есть, сохраняются как обычно).
        */
       async function save({ openId, historyId, brief, refresh } = {}) {
+        if (state.readOnly) return showError(READ_ONLY_HINT);
         const invalid = [...state.dirty.values()].find(
           (change) => change.priceRub !== undefined && !(change.priceRub > 0),
         );
@@ -1807,7 +1914,14 @@
           const payload = JSON.stringify(data);
           if (new TextEncoder().encode(payload).length > 4096)
             return showError('Слишком много правок за раз — сохраните частями');
-          tg.sendData(payload); // Telegram закрывает приложение, бот применяет правки и присылает ответ
+          // Telegram закрывает приложение, бот применяет правки и присылает ответ. Приложение, открытое не кнопкой
+          // «📋 Цели» внизу чата, Telegram молча не закрывает — правки не ушли (sendDataIgnored).
+          try {
+            tg.sendData(payload);
+          } catch {
+            // клиент без sendData — то же, что пропущенный вызов
+          }
+          setTimeout(sendDataIgnored, SEND_DATA_WAIT_MS);
           return;
         }
         tg.MainButton.showProgress();
@@ -1838,6 +1952,19 @@
         } finally {
           tg.MainButton.hideProgress();
         }
+      }
+
+      /** Приложение не закрылось после sendData: открыто не «📋 Цели» — правки сбрасываются, только просмотр. */
+      function sendDataIgnored() {
+        state.readOnly = true;
+        state.dirty.clear();
+        state.added = [];
+        state.deleted.clear();
+        state.watchAdd.clear();
+        state.watchRemove.clear();
+        haptic('error');
+        render();
+        showError('Отсюда не сохраняется. ' + READ_ONLY_HINT);
       }
 
       async function load() {
@@ -1919,6 +2046,8 @@
         tg.onEvent('themeChanged', applyTheme);
         if (fromLink) {
           state.offline = true;
+          // Кнопка закреплённого сообщения (inline): правки через sendData не дойдут — только просмотр
+          state.readOnly = openedInline();
           state.at = fromLink.at;
           state.targets = fromLink.targets;
           state.watched = fromLink.watched;
