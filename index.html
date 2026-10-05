@@ -22,6 +22,16 @@
         --gone-text: #7c7c84;
         --find: #ff3b30;
         --find-bg: rgba(255, 59, 48, 0.1);
+        /* Графики (TZ.md, шаг 5): рост и падение; текстовые — темнее, чтобы читались на светлом фоне. */
+        --up: #1f9a5e;
+        --down: #d93a3a;
+        --up-text: #17804d;
+        --down-text: #c62828;
+        --up-bg: rgba(31, 154, 94, 0.12);
+        --down-bg: rgba(217, 58, 58, 0.1);
+        --warn: #e8890c;
+        --warn-text: #b25e00;
+        --fill-top: 0.28;
       }
       body.dark {
         --good-bg: rgba(90, 214, 154, 0.15);
@@ -29,6 +39,15 @@
         --gone-bg: #0b0b0d;
         --find: #ff453a;
         --find-bg: rgba(255, 69, 58, 0.16);
+        --up: #5ad69a;
+        --down: #ff6b6b;
+        --up-text: #5ad69a;
+        --down-text: #ff6b6b;
+        --up-bg: rgba(90, 214, 154, 0.15);
+        --down-bg: rgba(255, 107, 107, 0.15);
+        --warn: #ffa53a;
+        --warn-text: #ffa53a;
+        --fill-top: 0.34;
       }
       * {
         box-sizing: border-box;
@@ -542,6 +561,9 @@
       .qtable .sub {
         white-space: nowrap;
       }
+      .qtable th.n {
+        text-align: right;
+      }
       /*
        * Находка подходит сейчас (решение владельца 05.10.2026, образец «как прямой эфир»): ровная красная точка, от неё
        * расходится и гаснет тень (1,6 с). Данные обновились и находки нет — нет и точки. Без анимации — просто точка.
@@ -582,6 +604,10 @@
         .pulse {
           animation: none;
         }
+        .chart .extras,
+        .chart .overlay {
+          transition: none;
+        }
       }
       .finds {
         margin: 6px 0 12px;
@@ -600,10 +626,13 @@
         display: flex;
         align-items: center;
         gap: 10px;
+        width: 100%;
         padding: 8px;
         margin-bottom: 6px;
         border-radius: 10px;
         background: var(--bg);
+        color: var(--text);
+        text-align: left;
         cursor: pointer;
       }
       .frow .title {
@@ -632,6 +661,12 @@
         right: -3px;
         width: 12px;
         height: 12px;
+      }
+      /* Строки на фоне карточки — подложка под точкой цвета карточки. */
+      .asset .thumb-wrap > .pulse,
+      .lrow .thumb-wrap > .pulse,
+      .srow .thumb-wrap > .pulse {
+        --ring: 0 0 0 2px var(--card);
       }
       .live-badge {
         display: inline-flex;
@@ -665,11 +700,598 @@
         margin: 6px 0;
         font-weight: 600;
       }
-      #tabLive .pulse {
+      #tabLive .pulse,
+      #tabStatsLive .pulse {
         width: 8px;
         height: 8px;
         margin-left: 4px;
         vertical-align: 1px;
+      }
+      button:focus-visible,
+      .chart svg:focus-visible {
+        outline: 2px solid var(--accent);
+        outline-offset: 2px;
+      }
+      .tiny {
+        font-size: 12px;
+      }
+      .section-title {
+        margin: 18px 2px 8px;
+        font-size: 17px;
+        font-weight: 700;
+      }
+      .group-title {
+        margin-bottom: 2px;
+        font-weight: 600;
+      }
+      .cost.okc,
+      .verdict.okc {
+        color: var(--good-text);
+      }
+      details.more summary {
+        padding: 2px 2px 6px;
+        color: var(--link);
+        cursor: pointer;
+      }
+      /* «Новые объявления» и «Цена модели» — графики «как в Telegram Wallet» (TZ.md, шаг 5). */
+      .chart-card {
+        padding: 12px 12px 10px;
+      }
+      .chart-label {
+        color: var(--hint);
+        font-size: 13px;
+      }
+      .chart-head {
+        display: flex;
+        align-items: center;
+        flex-wrap: wrap;
+        gap: 4px 10px;
+      }
+      .chart-value {
+        font-size: 32px;
+        font-weight: 700;
+        line-height: 1.2;
+        font-variant-numeric: tabular-nums;
+      }
+      /* Две строки всегда: подпись протяжки длиннее подписи покоя, и график под пальцем не должен прыгать. */
+      .chart-sub {
+        display: -webkit-box;
+        height: 2.7em;
+        overflow: hidden;
+        color: var(--hint);
+        font-size: 13px;
+        line-height: 1.35;
+        overflow-wrap: anywhere;
+        -webkit-line-clamp: 2;
+        -webkit-box-orient: vertical;
+      }
+      .chip {
+        display: inline-block;
+        padding: 2px 8px;
+        border-radius: 8px;
+        background: var(--bg);
+        color: var(--hint);
+        font-size: 15px;
+        font-weight: 600;
+        font-variant-numeric: tabular-nums;
+        white-space: nowrap;
+      }
+      .chip.small {
+        padding: 1px 6px;
+        font-size: 13px;
+      }
+      .chip.up {
+        background: var(--up-bg);
+        color: var(--up-text);
+      }
+      .chip.down {
+        background: var(--down-bg);
+        color: var(--down-text);
+      }
+      .chart {
+        position: relative;
+        margin: 8px -12px 0;
+      }
+      .chart.tone-up {
+        color: var(--up);
+      }
+      .chart.tone-down {
+        color: var(--down);
+      }
+      .chart.tone-accent {
+        color: var(--accent);
+      }
+      .chart svg {
+        display: block;
+        width: 100%;
+        overflow: visible;
+        touch-action: pan-y;
+        -webkit-user-select: none;
+        user-select: none;
+      }
+      .chart .line {
+        fill: none;
+        stroke: currentColor;
+        stroke-width: 2;
+        stroke-linecap: round;
+        stroke-linejoin: round;
+      }
+      .chart .line2 {
+        fill: none;
+        stroke: var(--accent);
+        stroke-width: 1.5;
+        stroke-dasharray: 3 3;
+        opacity: 0.75;
+      }
+      .chart .line-low {
+        fill: none;
+        stroke: currentColor;
+        stroke-width: 1.5;
+        stroke-dasharray: 4 4;
+        opacity: 0.55;
+      }
+      .chart .g0 {
+        stop-color: currentColor;
+        stop-opacity: var(--fill-top);
+      }
+      .chart .g1 {
+        stop-color: currentColor;
+        stop-opacity: 0;
+      }
+      .chart .lab {
+        fill: var(--hint);
+        font-size: 11px;
+        font-variant-numeric: tabular-nums;
+      }
+      .chart.scrubbing .extras .lab {
+        opacity: 0;
+      }
+      .chart .thr {
+        stroke: var(--hint);
+        stroke-width: 1;
+        stroke-dasharray: 6 4;
+      }
+      .chart .cross {
+        stroke: var(--hint);
+        stroke-width: 1;
+      }
+      .chart .dot,
+      .chart .solo {
+        fill: currentColor;
+        stroke: var(--card);
+        stroke-width: 2;
+      }
+      .chart .mark {
+        fill: var(--find);
+        stroke: var(--card);
+        stroke-width: 1.5;
+      }
+      .chart .faint {
+        fill: currentColor;
+        opacity: 0.35;
+      }
+      .chart .extras,
+      .chart .overlay {
+        transition: opacity 0.2s;
+      }
+      .chart-tip {
+        position: absolute;
+        top: 0;
+        padding: 3px 8px;
+        border-radius: 8px;
+        background: var(--bg);
+        color: var(--text);
+        box-shadow: 0 1px 6px rgba(0, 0, 0, 0.18);
+        font-size: 12px;
+        line-height: 1.3;
+        text-align: center;
+        white-space: nowrap;
+        pointer-events: none;
+        transform: translateX(-50%);
+      }
+      .chart-tip b,
+      .chart-tip span {
+        display: block;
+      }
+      .chart-empty {
+        position: absolute;
+        inset: 0;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        padding: 0 24px;
+        color: var(--hint);
+        font-size: 13px;
+        text-align: center;
+        pointer-events: none;
+      }
+      .periods {
+        display: flex;
+        gap: 4px;
+        margin-top: 8px;
+        padding: 3px;
+        border-radius: 10px;
+        background: var(--bg);
+      }
+      .periods button {
+        flex: 1;
+        padding: 6px 4px;
+        border-radius: 8px;
+        background: transparent;
+        color: var(--hint);
+        font-size: 14px;
+        font-weight: 600;
+      }
+      .periods button[aria-pressed='true'] {
+        background: var(--card);
+        color: var(--text);
+      }
+      /* Чипы: фильтры обходов, модели на экране цены, «дешёвые / новые». */
+      .chips {
+        display: flex;
+        gap: 6px;
+        margin: 0 -14px 8px;
+        padding: 2px 14px;
+        overflow-x: auto;
+        scrollbar-width: none;
+      }
+      .chips::-webkit-scrollbar {
+        display: none;
+      }
+      .fchip {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        flex: none;
+        padding: 6px 12px;
+        border-radius: 16px;
+        background: var(--card);
+        color: var(--text);
+        font-size: 14px;
+      }
+      .fchip .n {
+        color: var(--hint);
+        font-variant-numeric: tabular-nums;
+      }
+      .fchip[aria-pressed='true'] {
+        background: var(--accent);
+        color: var(--accent-text);
+      }
+      .fchip[aria-pressed='true'] .n {
+        color: inherit;
+        opacity: 0.8;
+      }
+      .chip-img {
+        width: 22px;
+        height: 22px;
+        flex: none;
+        border-radius: 50%;
+        object-fit: cover;
+        font-size: 11px;
+      }
+      /* Строка обхода: полоса слева по итогу, время, значок, три строки, «›». */
+      .rrow {
+        position: relative;
+        display: flex;
+        align-items: flex-start;
+        gap: 10px;
+        width: 100%;
+        min-height: 56px;
+        margin-bottom: 6px;
+        padding: 8px 8px 8px 12px;
+        overflow: hidden;
+        border-radius: 12px;
+        background: var(--card);
+        color: var(--text);
+        font-size: 14px;
+        text-align: left;
+      }
+      .rrow::before {
+        content: '';
+        position: absolute;
+        top: 0;
+        bottom: 0;
+        left: 0;
+        width: 3px;
+        background: var(--hint);
+      }
+      .rrow.o0::before {
+        background: var(--good);
+      }
+      .rrow.o2::before {
+        background: var(--warn);
+      }
+      .rrow.o3::before {
+        background: var(--danger);
+      }
+      .rrow.o4::before {
+        background: var(--accent);
+      }
+      .rrow.live {
+        background: var(--find-bg);
+      }
+      .rrow .t {
+        flex: none;
+        width: 42px;
+        font-variant-numeric: tabular-nums;
+      }
+      .rrow .t .sub,
+      .rrow .body > span {
+        display: block;
+      }
+      .rrow .body {
+        flex: 1;
+        min-width: 0;
+      }
+      .rrow .l1 {
+        overflow: hidden;
+        font-weight: 600;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+      .rrow .ic {
+        position: relative;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        flex: none;
+        width: 28px;
+        height: 28px;
+        font-size: 18px;
+      }
+      /* Строка обхода с живой находкой — на фоне находки (полупрозрачном): подложку под точкой не подобрать, её нет. */
+      .rrow .ic > .pulse {
+        --ring: 0 0 0 0 transparent;
+        position: absolute;
+        top: -3px;
+        right: -3px;
+      }
+      .ic-img {
+        width: 28px;
+        height: 28px;
+        border-radius: 50%;
+        object-fit: cover;
+        font-size: 13px;
+      }
+      .rrow .chev {
+        flex: none;
+        align-self: center;
+        color: var(--hint);
+        font-size: 22px;
+        line-height: 1;
+      }
+      .l2.grey,
+      .outcome.grey {
+        color: var(--hint);
+      }
+      .l2.bad,
+      .outcome.bad {
+        color: var(--danger);
+      }
+      .l2.warn,
+      .outcome.warn {
+        color: var(--warn-text);
+      }
+      /* «Цены моделей» — как активы в Wallet. */
+      .asset {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        width: 100%;
+        margin-bottom: 6px;
+        padding: 8px 10px;
+        border-radius: 12px;
+        background: var(--card);
+        color: var(--text);
+        text-align: left;
+      }
+      .asset .thumb {
+        width: 40px;
+        height: 40px;
+        border-radius: 50%;
+      }
+      .asset .info > span {
+        display: block;
+      }
+      .asset .right {
+        display: flex;
+        flex-direction: column;
+        align-items: flex-end;
+        gap: 2px;
+        flex: none;
+      }
+      .spark {
+        width: 64px;
+        height: 28px;
+        color: var(--accent);
+      }
+      .spark-line {
+        fill: none;
+        stroke: currentColor;
+        stroke-width: 1.5;
+        stroke-linecap: round;
+        stroke-linejoin: round;
+      }
+      /* Страница обхода. */
+      .run-head {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        margin-top: 4px;
+      }
+      .run-head h2 {
+        margin: 0;
+      }
+      .thumb.big {
+        width: 48px;
+        height: 48px;
+      }
+      .outcome {
+        margin: 12px 0 8px;
+        font-size: 19px;
+        font-weight: 700;
+      }
+      .outcome.ok {
+        color: var(--good-text);
+      }
+      .find-banner {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        width: 100%;
+        margin: 4px 0 8px;
+        padding: 10px 12px;
+        border-radius: 12px;
+        background: var(--find-bg);
+        color: var(--find);
+        font-weight: 600;
+        text-align: left;
+      }
+      .timeline {
+        display: flex;
+        height: 10px;
+        margin: 8px 0 4px;
+        overflow: hidden;
+        border-radius: 5px;
+        background: var(--bg);
+      }
+      .timeline span {
+        display: block;
+        height: 100%;
+      }
+      .seg-ok {
+        background: var(--good);
+      }
+      .seg-bad {
+        background: var(--danger);
+      }
+      .seg-warn {
+        background: var(--warn);
+      }
+      .seg-none,
+      .seg-wait {
+        background: var(--hint);
+        opacity: 0.45;
+      }
+      .seg-settle {
+        background: var(--accent);
+        opacity: 0.45;
+      }
+      .legend {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 2px 12px;
+        color: var(--hint);
+        font-size: 12px;
+      }
+      .legend span {
+        display: inline-flex;
+        align-items: center;
+        gap: 4px;
+      }
+      .legend i {
+        display: block;
+        width: 10px;
+        height: 10px;
+        border-radius: 3px;
+      }
+      .att {
+        display: flex;
+        align-items: flex-start;
+        gap: 8px;
+        padding: 6px 0;
+      }
+      .att + .att {
+        border-top: 1px solid var(--bg);
+      }
+      .att > i {
+        flex: none;
+        width: 8px;
+        height: 8px;
+        margin-top: 7px;
+        border-radius: 50%;
+      }
+      /* Объявления обхода и «Продаются сейчас». */
+      .lrow,
+      .srow {
+        display: flex;
+        align-items: flex-start;
+        gap: 10px;
+        width: 100%;
+        margin-bottom: 6px;
+        padding: 8px;
+        border-radius: 12px;
+        background: var(--card);
+        color: var(--text);
+        text-align: left;
+      }
+      .lrow .thumb {
+        width: 56px;
+        height: 56px;
+      }
+      .lrow .info > span,
+      .srow .info > span {
+        display: block;
+      }
+      .lrow .info > .title,
+      .srow .info > .title {
+        display: -webkit-box;
+        overflow: hidden;
+        overflow-wrap: anywhere;
+        -webkit-line-clamp: 2;
+        -webkit-box-orient: vertical;
+      }
+      .lrow .cost {
+        margin-top: 2px;
+      }
+      .vchips,
+      .lrow .info > .vchips {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 4px;
+        margin-top: 4px;
+      }
+      .vchip {
+        padding: 1px 6px;
+        border-radius: 6px;
+        background: var(--bg);
+        color: var(--hint);
+        font-size: 12px;
+      }
+      .verdict {
+        margin-top: 3px;
+        color: var(--hint);
+        font-size: 13px;
+      }
+      .verdict.sent {
+        color: var(--find);
+        font-weight: 600;
+      }
+      .srow {
+        align-items: center;
+        padding: 0 8px 0 0;
+      }
+      .srow-main {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        flex: 1;
+        min-width: 0;
+        padding: 8px;
+        background: transparent;
+        color: var(--text);
+        text-align: left;
+      }
+      .srow-main .info {
+        flex: 1;
+        min-width: 0;
+      }
+      /* «Avito ↗» — главная ссылка под графиком: кнопка заметна на фоне строки. */
+      .srow > .avito {
+        flex: none;
+        background: var(--bg);
+        color: var(--link);
+        font-weight: 600;
       }
       [hidden] {
         display: none !important;
@@ -685,11 +1307,11 @@
         <button type="button" id="refresh">🔄 Обновить</button>
       </div>
       <div id="readonly" class="ro" hidden>👀 Только просмотр. Править цены — кнопкой «📋 Цели» внизу чата.</div>
-      <h1>Цели <span class="muted" id="count"></span></h1>
-      <div class="tabs">
+      <h1><span id="title">Цели</span> <span class="muted" id="count"></span></h1>
+      <div class="tabs" id="tabs">
         <button type="button" class="tab active" id="tabTargets">📋 Модели <span id="tabLive"></span></button>
         <button type="button" class="tab" id="tabWatch">⭐ Слежу <span id="watchCount"></span></button>
-        <button type="button" class="tab" id="tabStats">📊 Обходы</button>
+        <button type="button" class="tab" id="tabStats">📊 Обходы <span id="tabStatsLive"></span></button>
       </div>
     </header>
 
@@ -723,6 +1345,484 @@
 
     <section id="detailView" hidden></section>
 
+    <script id="chart-math">
+      /*
+       * Чистые функции графиков (TZ.md «Поиск по моделям, страница обхода и графики», шаг 5): путь линии, ближайшая
+       * точка, прореживание, % изменения, суммы по окну. Без DOM: Jest выполняет этот блок через vm
+       * (test/miniapp/chart-math.test.ts).
+       */
+      var ChartMath = (() => {
+        const round = (value) => Math.round(value * 10) / 10;
+
+        /**
+         * Путь SVG через точки { x, y } (по возрастанию x) — монотонная кубическая интерполяция Фрича — Карлсона: между
+         * соседними точками линия не выходит за их значения — не уходит ниже нуля и не рисует несуществующих пиков.
+         */
+        function monotonePath(points) {
+          const count = points.length;
+          if (count === 0) return '';
+          const head = 'M' + round(points[0].x) + ',' + round(points[0].y);
+          if (count === 1) return head;
+          const steps = [];
+          const slopes = [];
+          for (let index = 0; index < count - 1; index++) {
+            const step = points[index + 1].x - points[index].x;
+            steps.push(step);
+            slopes.push(step === 0 ? 0 : (points[index + 1].y - points[index].y) / step);
+          }
+          const tangents = [slopes[0]];
+          for (let index = 1; index < count - 1; index++) {
+            const before = slopes[index - 1];
+            const after = slopes[index];
+            tangents.push(before * after <= 0 ? 0 : (before + after) / 2);
+          }
+          tangents.push(slopes[count - 2]);
+          for (let index = 0; index < count - 1; index++) {
+            const slope = slopes[index];
+            if (slope === 0) {
+              tangents[index] = 0;
+              tangents[index + 1] = 0;
+              continue;
+            }
+            const alpha = tangents[index] / slope;
+            const beta = tangents[index + 1] / slope;
+            const length = alpha * alpha + beta * beta;
+            if (length > 9) {
+              const scale = 3 / Math.sqrt(length);
+              tangents[index] = scale * alpha * slope;
+              tangents[index + 1] = scale * beta * slope;
+            }
+          }
+          let path = head;
+          for (let index = 0; index < count - 1; index++) {
+            const from = points[index];
+            const to = points[index + 1];
+            const third = steps[index] / 3;
+            const first = round(from.x + third) + ',' + round(from.y + tangents[index] * third);
+            const second = round(to.x - third) + ',' + round(to.y - tangents[index + 1] * third);
+            path += 'C' + first + ' ' + second + ' ' + round(to.x) + ',' + round(to.y);
+          }
+          return path;
+        }
+
+        /** Номер точки, ближайшей к x (xs — по возрастанию); пусто — −1. */
+        function nearestIndex(xs, x) {
+          if (xs.length === 0) return -1;
+          let low = 0;
+          let high = xs.length - 1;
+          while (high - low > 1) {
+            const middle = Math.floor((low + high) / 2);
+            if (xs[middle] <= x) low = middle;
+            else high = middle;
+          }
+          return Math.abs(xs[high] - x) < Math.abs(xs[low] - x) ? high : low;
+        }
+
+        /**
+         * Прореживание до max точек (Largest-Triangle-Three-Buckets): первая и последняя остаются, из каждой корзины —
+         * точка с наибольшим треугольником, поэтому пики не теряются. Точки с mark (дни находок) остаются всегда, сверх
+         * max: иначе пропали бы их красные отметки и протяжка до них. Точки — те же объекты (со всеми полями).
+         */
+        function thin(points, max) {
+          const out = lttb(points, max);
+          if (out.length === points.length) return out;
+          const kept = new Set(out);
+          const marks = points.filter((point) => point.mark && !kept.has(point));
+          return marks.length === 0 ? out : out.concat(marks).sort((a, b) => a.x - b.x);
+        }
+
+        function lttb(points, max) {
+          if (max < 3 || points.length <= max) return points.slice();
+          const out = [points[0]];
+          const every = (points.length - 2) / (max - 2);
+          let anchor = 0;
+          for (let bucket = 0; bucket < max - 2; bucket++) {
+            const start = Math.floor(bucket * every) + 1;
+            const end = Math.floor((bucket + 1) * every) + 1;
+            const nextEnd = Math.min(Math.floor((bucket + 2) * every) + 1, points.length);
+            let averageX = 0;
+            let averageY = 0;
+            for (let index = end; index < nextEnd; index++) {
+              averageX += points[index].x;
+              averageY += points[index].y;
+            }
+            const size = Math.max(1, nextEnd - end);
+            averageX /= size;
+            averageY /= size;
+            const a = points[anchor];
+            let best = start;
+            let area = -1;
+            for (let index = start; index < end; index++) {
+              const b = points[index];
+              const value = Math.abs((a.x - averageX) * (b.y - a.y) - (a.x - b.x) * (averageY - a.y));
+              if (value > area) {
+                area = value;
+                best = index;
+              }
+            }
+            out.push(points[best]);
+            anchor = best;
+          }
+          out.push(points[points.length - 1]);
+          return out;
+        }
+
+        /** Изменение в процентах, округлённое; база не больше нуля — null. */
+        function changePercent(from, to) {
+          if (!(from > 0) || typeof to !== 'number') return null;
+          return Math.round(((to - from) * 100) / from);
+        }
+
+        /** Наименьшее и наибольшее (не числа пропускаются); пусто — [0, 1]. */
+        function extent(values) {
+          let low = Infinity;
+          let high = -Infinity;
+          for (const value of values) {
+            if (typeof value !== 'number' || Number.isNaN(value)) continue;
+            low = Math.min(low, value);
+            high = Math.max(high, value);
+          }
+          return low === Infinity ? [0, 1] : [low, high];
+        }
+
+        /** Сумма ряда (шаги по step от start) за окно [from, to): шаг на границе входит долей по времени. */
+        function windowSum(values, start, step, from, to) {
+          let sum = 0;
+          values.forEach((value, index) => {
+            const left = Math.max(from, start + index * step);
+            const right = Math.min(to, start + (index + 1) * step);
+            if (right > left) sum += ((Number(value) || 0) * (right - left)) / step;
+          });
+          return sum;
+        }
+
+        /** Ряд из дельт (первая — значение, дальше — разница с предыдущим), умноженный на unit. */
+        function undelta(values, unit) {
+          let value = 0;
+          return values.map((delta, index) => {
+            value = index === 0 ? Number(delta) || 0 : value + (Number(delta) || 0);
+            return value * unit;
+          });
+        }
+
+        /** Значение ломаной (точки по возрастанию x) в x; за краями — крайние значения. */
+        function sampleAt(points, x) {
+          if (points.length === 0) return 0;
+          if (x <= points[0].x) return points[0].y;
+          for (let index = 1; index < points.length; index++) {
+            const right = points[index];
+            if (x > right.x) continue;
+            const left = points[index - 1];
+            const span = right.x - left.x;
+            return span === 0 ? right.y : left.y + ((right.y - left.y) * (x - left.x)) / span;
+          }
+          return points[points.length - 1].y;
+        }
+
+        return { monotonePath, nearestIndex, thin, changePercent, extent, windowSum, undelta, sampleAt };
+      })();
+    </script>
+
+    <script id="run-text">
+      /*
+       * Фразы «📊 Обходы» — как у сервера (в данных только коды): словарь ошибок обхода (stats/run-errors.ts,
+       * RUN_ERROR_TEXT; индекс — код 0–15) и причины замедления очередей (targets/model-search.ts, laneSlowText;
+       * индекс — код 1–7). Совпадение проверяет test/miniapp/chart-math.test.ts.
+       */
+      var RunText = {
+        errors: [
+          'без ошибок',
+          'связь оборвалась',
+          'Avito не ответил вовремя',
+          'страница не загрузилась за 60 с',
+          'у ПК пропал или сменился интернет',
+          'не нашёлся адрес avito.ru',
+          'сервер не ответил',
+          'защищённое соединение не установилось',
+          'Avito закрыл доступ',
+          'Avito попросил подождать',
+          'страница пришла, но объявления не разобрать',
+          'Avito ничего не нашёл',
+          'ПК не прислал результат за 7 минут',
+          'расширение обновлялось — обход пропущен',
+          'страница слишком большая',
+          'другое',
+        ],
+        slow: [
+          '',
+          'выключен (MODEL_SEARCH=false)',
+          'Avito на паузе',
+          'Avito в бэкоффе',
+          'пауза после блока',
+          'лимит Avito',
+          'мало удачных обходов',
+          'агент занят',
+        ],
+      };
+    </script>
+
+    <script id="stats-data">
+      /*
+       * Чтение данных «📊 Обходы» без DOM (TZ.md «Поиск по моделям, страница обхода и графики», шаг 5): сводка ссылки
+       * «📋 Цели» (d, старые восьмиполевые строки r) и профиль статистики (k: 's' и поле S сервера; формат — в начале
+       * apps/core/src/miniapp/stats-payload.ts). Jest выполняет этот блок вместе с chart-math через vm
+       * (test/miniapp/chart-math.test.ts): старые строки читаются, а строки сервера ложатся в поля, которые читает
+       * страница.
+       */
+      var StatsData = (() => {
+        const safeUrl = (value) => (typeof value === 'string' && /^https:\/\//.test(value) ? value : null);
+        const isNum = (value) => typeof value === 'number' && Number.isFinite(value);
+        const has = (flags, bit) => (Number(flags) & bit) !== 0;
+
+        /** Выход Avito за сутки (с 05.10.2026): [сервер | «напрямую», IP | 0, обходов, удачных, блоков, ошибок]. */
+        function exitFromRow([label, ip, runs, ok, blocked, failed]) {
+          return {
+            label: String(label),
+            ip: ip || null,
+            runs: Number(runs) || 0,
+            ok: Number(ok) || 0,
+            blocked: Number(blocked) || 0,
+            failed: Number(failed) || 0,
+          };
+        }
+
+        /** Сводка «📊 Обходы» (одна форма в ссылке и в API). */
+        function dashboardFrom(d) {
+          if (!d) return null;
+          const [runs, ok, blocked, failed, found, fresh, finds, discoveries] = d.s || [];
+          const exits = (d.x || []).map(exitFromRow);
+          return {
+            day: { runs, ok, blocked, failed, found, fresh, finds, discoveries },
+            listings: d.n || 0,
+            pausedUntil: d.p || null,
+            pauseReason: d.pr || null,
+            queries: (d.q || []).map(([query, qRuns, qOk, qFound, qFresh]) => ({
+              query,
+              runs: qRuns,
+              ok: qOk,
+              found: qFound,
+              fresh: qFresh,
+            })),
+            exits,
+            recent: (d.r || []).map(([at, label, watch, code, rFound, rFresh, seconds, exit]) => ({
+              at,
+              label,
+              watch: watch === 1,
+              code,
+              found: rFound,
+              fresh: rFresh,
+              seconds,
+              // Через что грузилась страница Avito — строка x; -1 (не Avito) и в ссылках старее 05.10.2026 — ничего.
+              exit: exit >= 0 ? exits[exit] || null : null,
+            })),
+          };
+        }
+
+        /**
+         * Профиль статистики (TZ.md «Поиск по моделям, страница обхода и графики», шаг 5): ссылка табло (k: 's') или
+         * поле S серверного режима. Формат — в начале apps/core/src/miniapp/stats-payload.ts.
+         */
+        function profileFrom(data) {
+          const at = Number(data.at) || Math.floor(Date.now() / 1000);
+          const atMinute = Math.floor(at / 60);
+          const targets = new Map();
+          for (const row of data.t || []) targets.set(row[0], targetFromRow(row));
+          const listings = new Map();
+          for (const row of data.L || []) listings.set(row[0], listingFromRow(row, atMinute));
+          const runs = (data.r || []).map(runFromRow);
+          // В r сначала последние обходы (подробности — у первых подряд), затем «интересные» — всегда с подробностями:
+          // до сортировки по времени первая строка без подробностей — сколько последних обходов с подробностями
+          const bare = runs.findIndex((run) => run.freshIds === 0);
+          const interesting = bare === -1 ? 0 : runs.slice(bare).filter((run) => run.freshIds !== 0).length;
+          runs.sort((a, b) => b.minute - a.minute || b.id - a.id);
+          return {
+            at,
+            atMinute,
+            day: data.s || [],
+            pauseReason: data.pr || null,
+            groups: (data.g || []).map(groupFromRow),
+            exits: (data.x || []).map(exitFromRow),
+            series: data.c || null,
+            offset: displayOffset(data.c),
+            targets,
+            models: (data.m || []).map(modelFromRow),
+            runs,
+            // «Подробности — у последних N обходов»: null — подробности у всех обходов
+            detailed: bare === -1 ? null : bare,
+            // «Интересные» за сутки (с подробностями) в r после последних
+            interesting,
+            listings,
+            urls: (data.u || []).map(fullUrl),
+            queries: (data.q || []).map(queryFromRow),
+            cut: data.o || null,
+          };
+        }
+
+        /** Ссылка из данных: у Avito — путь от «/». */
+        function fullUrl(url) {
+          return safeUrl(typeof url === 'string' && url.startsWith('/') ? 'https://www.avito.ru' + url : url);
+        }
+
+        /**
+         * Смещение DISPLAY_TZ от UTC, мин: от сервера (c.z). В ссылках до c.z — догадка: блоки q начинаются в 00, 06,
+         * 12 и 18 ч по нему — из смещений, кратных этому, берётся ближайшее к поясу телефона.
+         */
+        function displayOffset(series) {
+          const own = -new Date().getTimezoneOffset();
+          if (series && isNum(series.z)) return series.z;
+          if (!series || !isNum(series.q0)) return own;
+          const base = ((-series.q0 % 360) + 360) % 360;
+          let best = base;
+          for (let shift = -1440; shift <= 1440; shift += 360) {
+            if (Math.abs(base + shift - own) < Math.abs(best - own)) best = base + shift;
+          }
+          return best;
+        }
+
+        /** Цель профиля: [id, название, порог ₽, включена, фото | 0, поиск по модели, кукол в продаже за 7 дней]. */
+        function targetFromRow([id, name, priceRub, active, img, modelSearch, selling]) {
+          return {
+            id,
+            name: String(name),
+            priceRub: Number(priceRub) || 0,
+            active: active === 1,
+            img: safeUrl(img || null),
+            modelSearch: modelSearch === 1,
+            selling: Number(selling) || 0,
+          };
+        }
+
+        /** Группа за сутки (g, 13 чисел): общие, модели или проверки страниц — интервал, замедление, очередь. */
+        function groupFromRow(row) {
+          return {
+            group: row[0],
+            urls: row[1],
+            runs: row[2],
+            ok: row[3],
+            fresh: row[4],
+            only: row[5],
+            finds: row[6],
+            every: row[7],
+            target: row[8],
+            slow: row[9],
+            slowUntil: row[10],
+            waitMedian: row[11],
+            waitP90: row[12],
+          };
+        }
+
+        /** Запрос за сутки (q): [запрос, обходов, удачных, найдено, новых, группа, только им, находок, цель | 0]. */
+        function queryFromRow([query, runs, ok, found, fresh, group, only, finds, targetId]) {
+          return { query: String(query), runs, ok, found, fresh, group, only, finds, targetId: targetId || null };
+        }
+
+        /**
+         * Цена модели (m): медиана и минимум — дельтами по 10 ₽; кукол 0 — в этот день точки нет; short — в ссылку
+         * вошли только последние 30 дней.
+         */
+        function modelFromRow([targetId, d0, medians, mins, counts, finds, selling, short]) {
+          return {
+            targetId,
+            d0,
+            median: ChartMath.undelta(medians || [], 10),
+            min: ChartMath.undelta(mins || [], 10),
+            counts: counts || [],
+            finds: finds || [],
+            selling: Array.isArray(selling) ? selling : null,
+            short: short === 1,
+          };
+        }
+
+        /** Обход (r, 26 полей); списки 22–25 — 0, если подробности не поместились в ссылку. */
+        function runFromRow(row) {
+          return {
+            id: row[0],
+            minute: row[1],
+            kind: row[2],
+            about: row[3],
+            outcome: row[4],
+            found: row[5],
+            fresh: row[6],
+            cheaper: row[7],
+            known: row[8],
+            seconds: row[9],
+            wait: row[10],
+            exit: row[11],
+            attempts: row[12],
+            code: row[13] || 0,
+            finds: row[14] || 0,
+            page: row[15] || 1,
+            flags: row[16] || 0,
+            url: row[17],
+            http: row[18] || 0,
+            kb: row[19] || 0,
+            thresholdRub: row[20] || 0,
+            errorText: row[21] || null,
+            freshIds: row[22] ?? 0,
+            cheaperList: row[23] ?? 0,
+            attemptList: row[24] ?? 0,
+            findIds: row[25] ?? 0,
+          };
+        }
+
+        /** Разбор классификатора: [тип, уверенность %, шт, предложение, подделка] | 0. */
+        function verdictFromRow(row) {
+          if (!Array.isArray(row)) return null;
+          return {
+            type: row[0],
+            confidence: row[1],
+            quantity: Math.max(1, Number(row[2]) || 1),
+            offer: row[3],
+            fake: row[4] === 1,
+          };
+        }
+
+        /** Объявление словаря L; время — минуты Unix (в данных — минут до at). */
+        function listingFromRow(row, atMinute) {
+          const flags = Number(row[6]) || 0;
+          return {
+            id: row[0],
+            url: fullUrl(row[1]),
+            title: String(row[2] || ''),
+            priceRub: row[3] === null || row[3] === undefined ? null : Number(row[3]),
+            img: safeUrl(row[4] || null),
+            targetId: row[5] || null,
+            live: has(flags, 1),
+            sent: has(flags, 2),
+            within: has(flags, 4),
+            lot: has(flags, 8),
+            baseline: has(flags, 16),
+            byModel: has(flags, 32),
+            removed: has(flags, 64),
+            watched: has(flags, 128),
+            outcome: Number(row[7]) || 0,
+            verdict: verdictFromRow(row[8]),
+            firstSeen: atMinute - (Number(row[9]) || 0),
+            lastSeen: atMinute - (Number(row[10]) || 0),
+            sentAt: row[11] >= 0 ? atMinute - row[11] : null,
+            // Истории цены и проверок ПК в профиле нет — строк «Цена не менялась» и «ещё не проверял» нет
+            trail: null,
+            checks: null,
+          };
+        }
+
+        return {
+          dashboardFrom,
+          profileFrom,
+          exitFromRow,
+          runFromRow,
+          listingFromRow,
+          modelFromRow,
+          targetFromRow,
+          groupFromRow,
+          queryFromRow,
+          verdictFromRow,
+          displayOffset,
+          fullUrl,
+        };
+      })();
+    </script>
+
     <script>
       const tg = window.Telegram && window.Telegram.WebApp;
       // Два режима: данные в ссылке (#z=… сжато, #t=… старый формат; правки — боту через sendData; ПК снаружи
@@ -735,21 +1835,27 @@
         filter: '',
         offline: false,
         at: null,
-        view: null,
         nextNewId: -1,
         tab: 'targets',
-        watchItem: null,
         dashboard: null,
-        item: null,
         watched: [],
         watchAdd: new Map(),
         watchRemove: new Set(),
         // «🔴 Подходят сейчас»: пары «объявление — цель» из данных; точки рисуются только по ним.
         finds: [],
-        // Страницу объявления открыли из блока находок: «Назад» — сразу к списку.
-        findBack: false,
         // Открыто кнопкой закреплённого сообщения: sendData не работает — правок нет, только просмотр.
         readOnly: false,
+        // Экраны поверх вкладок (модель, объявление, обход, цена модели): «Назад» снимает верхний — цепочка
+        // «обход → объявление → Назад» возвращает к обходу.
+        stack: [],
+        // Ссылка кнопки табло «📊 Обходы и графики» (k: 's'): только профиль статистики, целей для правок нет.
+        statsOnly: false,
+        // Профиль статистики: графики, цены моделей, страницы обходов (ссылка табло или поле S сервера).
+        profile: null,
+        newPeriod: '1d',
+        pricePeriod: '1m',
+        runFilter: 'all',
+        sellingSort: 'cheap',
       };
       const $ = (id) => document.getElementById(id);
       // Данные из ссылки старше этого — плашка «могли измениться» с кнопкой «🔄 Обновить»: цели правят несколько
@@ -760,6 +1866,64 @@
       const READ_ONLY_HINT = 'Править цены — кнопкой «📋 Цели» внизу чата.';
       const rub = (value) => Number(value).toLocaleString('ru-RU', { maximumFractionDigits: 2 }) + ' ₽';
       const safeUrl = (value) => (typeof value === 'string' && /^https:\/\//.test(value) ? value : null);
+      const fmt = (value) => Number(value).toLocaleString('ru-RU');
+      const isNum = (value) => typeof value === 'number' && Number.isFinite(value);
+      const has = (flags, bit) => (Number(flags) & bit) !== 0;
+      /** Координаты SVG — до 0,1 px. */
+      const px = (value) => Math.round(value * 10) / 10;
+      const nowMinute = () => Math.floor(Date.now() / 60_000);
+      /** Со знаком: «+23», «−5» (минус — U+2212). */
+      const signed = (value) => (value > 0 ? '+' : value < 0 ? '−' : '') + fmt(Math.abs(value));
+      const STATS_HINT = 'Графики и страницы обходов — кнопка «📊 Обходы и графики» на закреплённом табло.';
+      const RUN_ERROR_TEXT = RunText.errors;
+      const { dashboardFrom, profileFrom } = StatsData;
+      const ITEM_TYPE_TEXT = ['кукла', 'лот', 'одежда', 'аксессуар', 'коробка', 'другое'];
+      const OFFER_TEXT = ['продажа', 'предзаказ', 'продано или бронь', 'куплю', 'обмен', 'услуга'];
+      const GROUP_TITLE = ['🔎 Общие', '🎯 По моделям', 'Проверки страниц'];
+      /** Значок обхода по виду: общий, модель (без фото), «⭐ Слежу», разовый, автопроверка находки. */
+      const RUN_ICON = ['🔎', '🎯', '⭐', '⚙', '🔴'];
+
+      /** Форма слова по числу: 1 находка, 2 находки, 5 находок. */
+      function plural(count, one, few, many) {
+        const tens = Math.abs(count) % 100;
+        const units = tens % 10;
+        if (tens >= 11 && tens <= 14) return many;
+        if (units === 1) return one;
+        if (units >= 2 && units <= 4) return few;
+        return many;
+      }
+
+      const countText = (count, one, few, many) => fmt(count) + ' ' + plural(count, one, few, many);
+
+      /** «14:31» по часам телефона. */
+      function clock(minute) {
+        return new Date(minute * 60_000).toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' });
+      }
+
+      /** У времени не сегодняшнего — «вчера» или «04.10»; сегодня — пусто. */
+      function dayHint(minute) {
+        const date = new Date(minute * 60_000);
+        const today = new Date();
+        if (date.toDateString() === today.toDateString()) return '';
+        const yesterday = new Date(today.getFullYear(), today.getMonth(), today.getDate() - 1);
+        if (date.toDateString() === yesterday.toDateString()) return 'вчера';
+        return date.toLocaleDateString('ru-RU', { day: '2-digit', month: '2-digit' });
+      }
+
+      /** День по DISPLAY_TZ: «пн, 5 окт.» (номер дня × сутки — полночь UTC этой даты). */
+      function dayLabel(day, weekday = true) {
+        const options = { day: 'numeric', month: 'short', timeZone: 'UTC' };
+        if (weekday) options.weekday = 'short';
+        return new Date(day * 86_400_000).toLocaleDateString('ru-RU', options);
+      }
+
+      /** Длительность: «47 с», «3 мин», «1 ч 5 мин». */
+      function duration(seconds) {
+        if (seconds < 60) return Math.round(seconds) + ' с';
+        const minutes = Math.round(seconds / 60);
+        if (minutes < 60) return minutes + ' мин';
+        return Math.floor(minutes / 60) + ' ч ' + (minutes % 60) + ' мин';
+      }
 
       function el(tag, className, text) {
         const node = document.createElement(tag);
@@ -896,46 +2060,6 @@
         };
       }
 
-      /** Сводка «📊 Обходы» (одна форма в ссылке и в API). */
-      function dashboardFrom(d) {
-        if (!d) return null;
-        const [runs, ok, blocked, failed, found, fresh, finds, discoveries] = d.s || [];
-        // x — Avito за сутки по выходам (с 05.10.2026): [сервер | «напрямую», IP | 0, обходов, удачных, блоков, ошибок]
-        const exits = (d.x || []).map(([label, ip, xRuns, xOk, xBlocked, xFailed]) => ({
-          label: String(label),
-          ip: ip || null,
-          runs: Number(xRuns) || 0,
-          ok: Number(xOk) || 0,
-          blocked: Number(xBlocked) || 0,
-          failed: Number(xFailed) || 0,
-        }));
-        return {
-          day: { runs, ok, blocked, failed, found, fresh, finds, discoveries },
-          listings: d.n || 0,
-          pausedUntil: d.p || null,
-          pauseReason: d.pr || null,
-          queries: (d.q || []).map(([query, qRuns, qOk, qFound, qFresh]) => ({
-            query,
-            runs: qRuns,
-            ok: qOk,
-            found: qFound,
-            fresh: qFresh,
-          })),
-          exits,
-          recent: (d.r || []).map(([at, label, watch, code, rFound, rFresh, seconds, exit]) => ({
-            at,
-            label,
-            watch: watch === 1,
-            code,
-            found: rFound,
-            fresh: rFresh,
-            seconds,
-            // Через что грузилась страница Avito — строка x; -1 (не Avito) и в ссылках старее 05.10.2026 — ничего.
-            exit: exit >= 0 ? exits[exit] || null : null,
-          })),
-        };
-      }
-
       /** Выход обхода Avito: «через ru-02 · 93.183.81.88» или «напрямую». */
       function exitText(exit) {
         if (exit.label === 'напрямую') return 'напрямую';
@@ -1023,6 +2147,7 @@
             .stream()
             .pipeThrough(new DecompressionStream('deflate-raw'));
           const data = JSON.parse(await new Response(stream).text());
+          if (data.k === 's') return statsFromLink(data);
           return {
             at: data.at || null,
             targets: data.t.map(
@@ -1057,6 +2182,83 @@
             normalize({ id, name, priceRub, active: active === 1 }),
           ),
         };
+      }
+
+      /** Ссылка кнопки табло «📊 Обходы и графики» (k: 's'): только профиль статистики, целей для правок нет. */
+      function statsFromLink(data) {
+        return {
+          stats: true,
+          at: data.at || null,
+          targets: [],
+          watched: [],
+          dashboard: null,
+          finds: (data.f || []).map((row) => findFromRow(row, data.at)),
+          profile: profileFrom(data),
+        };
+      }
+
+      /** Начало дня DISPLAY_TZ (номер дня) — минута Unix. */
+      const dayMinute = (p, day) => day * 1440 - p.offset;
+
+      /** Находка, которой нет в словаре L, — как объявление профиля. */
+      function findListing(find) {
+        const lot = { type: 1, confidence: 0, quantity: find.quantity, offer: 0, fake: false };
+        return {
+          id: find.listingId,
+          url: find.url,
+          title: find.title,
+          priceRub: find.priceRub,
+          img: find.img,
+          targetId: find.targetId,
+          live: true,
+          sent: true,
+          within: true,
+          lot: find.quantity > 1,
+          baseline: false,
+          byModel: false,
+          removed: false,
+          watched: false,
+          outcome: 0,
+          verdict: find.quantity > 1 ? lot : null,
+          firstSeen: null,
+          lastSeen: null,
+          sentAt: find.found,
+          trail: null,
+          checks: null,
+        };
+      }
+
+      function profileTarget(id) {
+        return state.profile ? state.profile.targets.get(id) || null : null;
+      }
+
+      function profileModel(id) {
+        return state.profile ? state.profile.models.find((model) => model.targetId === id) || null : null;
+      }
+
+      function profileRun(id) {
+        return state.profile ? state.profile.runs.find((run) => run.id === id) || null : null;
+      }
+
+      /** Объявление профиля (словарь L) или находка, которой в нём нет; нет — null. */
+      function profileItem(id, targetId) {
+        const listing = state.profile ? state.profile.listings.get(id) : null;
+        if (listing) return listing;
+        const find = state.finds.find((item) => item.listingId === id && (!targetId || item.targetId === targetId));
+        return find ? findListing(find) : null;
+      }
+
+      /** Название цели: из целей «📋 Цели» или из профиля статистики. */
+      function targetName(id) {
+        const target = findTarget(id) || profileTarget(id);
+        return target ? target.name : 'модель ' + id;
+      }
+
+      /** Цель профиля или заглушка (цель удалили, в данных её нет). */
+      function lightTarget(p, id) {
+        const target = p.targets.get(id);
+        if (target) return target;
+        return { id, name: targetName(id), priceRub: 0, active: false, img: null, modelSearch: false, selling: 0 };
       }
 
       function current(target) {
@@ -1126,7 +2328,9 @@
       function liveFinds() {
         return state.finds.filter((find) => {
           const target = findTarget(find.targetId);
-          if (!target || state.deleted.has(target.id)) return false;
+          // Только профиль статистики (кнопка табло): целей для правок нет — находки как в данных
+          if (!target) return state.statsOnly;
+          if (state.deleted.has(target.id)) return false;
           const now = current(target);
           return now.active && find.unitRub <= now.priceRub;
         });
@@ -1170,26 +2374,37 @@
         return badge;
       }
 
-      /** Блок «🔴 Подходят сейчас (N)» сверху «📋 Модели»: объявление — одна строка (под две цели — обе модели). */
-      function renderFinds() {
-        const box = $('finds');
-        box.textContent = '';
+      /** Находки, которые подходят сейчас, по объявлениям: объявление под две цели — одна строка с обеими моделями. */
+      function findGroups() {
         const groups = new Map();
         for (const find of liveFinds()) {
-          const name = findTarget(find.targetId).name;
+          const name = targetName(find.targetId);
           const group = groups.get(find.listingId);
           if (group) group.models.push(name);
           else groups.set(find.listingId, { find, models: [name] });
         }
-        box.hidden = groups.size === 0;
+        return [...groups.values()];
+      }
+
+      /** Блок «🔴 Подходят сейчас (N)» сверху «📋 Модели»: объявление — одна строка (под две цели — обе модели). */
+      function renderFinds() {
+        const groups = findGroups();
+        fillFinds($('finds'), groups);
         $('tabLive').textContent = '';
-        if (groups.size === 0) return;
-        $('tabLive').append(pulse());
+        if (groups.length > 0) $('tabLive').append(pulse());
+      }
+
+      /** Блок находок: «📋 Модели» и вкладка «📊 Обходы» профиля статистики. */
+      function fillFinds(box, groups) {
+        box.textContent = '';
+        box.hidden = groups.length === 0;
+        if (groups.length === 0) return;
         const head = el('div', 'finds-head');
-        head.append(pulse(), el('span', '', 'Подходят сейчас (' + groups.size + ')'));
+        head.append(pulse(), el('span', '', 'Подходят сейчас (' + groups.length + ')'));
         box.append(head);
-        for (const { find, models } of groups.values()) {
-          const row = el('div', 'frow');
+        for (const { find, models } of groups) {
+          const row = el('button', 'frow');
+          row.type = 'button';
           const info = el('div', 'info');
           info.append(el('div', 'title', find.title));
           info.append(el('div', 'sub', models.join(', ') + ' · ' + ago(find.found)));
@@ -1364,7 +2579,7 @@
         const hero = thumb(target, 'hero');
         if (first) {
           hero.style.cursor = 'pointer';
-          hero.addEventListener('click', () => showItem(first.id));
+          hero.addEventListener('click', () => showItem(target.id, first.id));
         }
         view.append(hero, el('h2', '', target.name));
         if (deleted) view.append(el('div', 'error', 'Будет удалена при сохранении.'));
@@ -1455,7 +2670,7 @@
             });
             item.append(star);
           }
-          item.addEventListener('click', () => showItem(listing.id));
+          item.addEventListener('click', () => showItem(target.id, listing.id));
           listingsPanel.append(item);
         }
         const hidden = target.activeCount + target.removedCount - target.listings.length;
@@ -1467,6 +2682,18 @@
         view.append(listingsPanel);
 
         const actions = el('div', 'actions');
+        if (target.id > 0) {
+          // График цены — из профиля статистики (кнопка табло, серверный режим); в «📋 Цели» его нет — подсказка
+          const chart = el('button', 'ghost', '📈 График цены');
+          chart.type = 'button';
+          const hint = el('div', 'muted', state.profile ? 'Цен этой модели по дням пока нет.' : STATS_HINT);
+          hint.hidden = true;
+          chart.addEventListener('click', () => {
+            if (profileModel(target.id)) openScreen({ type: 'price', targetId: target.id });
+            else hint.hidden = false;
+          });
+          actions.append(chart, hint);
+        }
         // Только просмотр: «в чат» — тоже sendData, удаление — правка
         if (state.offline && target.id > 0 && !state.readOnly) {
           const chat = el('button', '', '📈 История цен и все объявления — в чат');
@@ -1539,16 +2766,17 @@
         };
         if (listing.firstSeen) line('Впервые увидели', minuteDate(listing.firstSeen));
         if (listing.lastSeen) line('Последний раз видели', minuteDate(listing.lastSeen));
-        if (listing.trail.length > 1) {
+        // Объявление из профиля статистики: истории цены в данных нет (trail: null) — строки о ней нет
+        if (listing.trail && listing.trail.length > 1) {
           const first = listing.trail[0];
           const last = listing.trail[listing.trail.length - 1];
           const change = Math.round(((last - first) * 100) / first);
           line('Цена менялась', listing.trail.map((value) => Number(value).toLocaleString('ru-RU')).join(' → ') + ' ₽');
           line('Изменение', (change > 0 ? '+' : change < 0 ? '−' : '') + Math.abs(change) + ' %');
-        } else {
+        } else if (listing.trail) {
           line('Цена', 'не менялась');
         }
-        if (isWatched(listing.id)) line('⭐ Слежу', 'ПК проверяет раз в ~2 ч');
+        if (isWatched(listing.id) || listing.watched === true) line('⭐ Слежу', 'ПК проверяет раз в ~2 ч');
         view.append(info);
         if (listing.checks && listing.checks.length > 0) {
           const checks = el('div', 'panel');
@@ -1563,7 +2791,7 @@
             checks.append(row);
           }
           view.append(checks);
-        } else if (isWatched(listing.id)) {
+        } else if (isWatched(listing.id) && listing.checks !== null) {
           view.append(
             el('div', 'muted', 'ПК ещё не проверял — первая проверка примерно через 2 часа после «⭐ Следить».'),
           );
@@ -1590,10 +2818,7 @@
       }
 
       function showWatchItem(listingId) {
-        state.watchItem = listingId;
-        haptic('select');
-        render();
-        window.scrollTo(0, 0);
+        openScreen({ type: 'watch', id: listingId });
       }
 
       function statusText(code) {
@@ -1614,10 +2839,22 @@
         return button;
       }
 
+      /** Вкладка «📊 Обходы»: профиль статистики (графики, цены моделей, страницы обходов) или сводка «📋 Цели». */
       function renderStats() {
         const view = $('statsView');
         view.textContent = '';
+        if (!state.profile) return renderDashboard(view);
+        try {
+          renderProfile(view, state.profile);
+        } catch (error) {
+          view.append(el('div', 'error', 'Не удалось показать обходы: ' + error.message));
+        }
+      }
+
+      /** Сводка из ссылки «📋 Цели» (как раньше); графики и страницы обходов — в кнопке табло. */
+      function renderDashboard(view) {
         view.append(briefAction());
+        view.append(el('div', 'muted', STATS_HINT));
         const d = state.dashboard;
         if (!d) {
           view.append(el('div', 'empty muted', 'Сводки пока нет — она появится со следующей кнопкой «📋 Цели».'));
@@ -1670,33 +2907,8 @@
           view.append(panel);
         }
 
-        // Avito по выходам (решение владельца 05.10.2026) — видно, помогают ли российские серверы. Выход без обходов
-        // за сутки — только у старых обходов из списка ниже.
-        const exits = d.exits.filter((exit) => exit.runs > 0);
-        if (exits.length > 0) {
-          const panel = el('div', 'panel');
-          panel.append(el('div', 'muted', 'Через что ходили (сутки)'));
-          const table = el('table', 'qtable');
-          const head = el('tr');
-          for (const title of ['Сервер, IP', 'Обходов', 'Удачно', 'Блоков']) head.append(el('th', '', title));
-          table.append(head);
-          for (const exit of exits) {
-            const where = el('td', '', exit.label);
-            if (exit.ip) where.append(el('div', 'sub', exit.ip));
-            const percent = Math.round((exit.ok * 100) / exit.runs);
-            const tr = el('tr');
-            tr.append(
-              where,
-              el('td', 'n', String(exit.runs)),
-              el('td', 'n' + (percent >= 80 ? ' good' : percent < 50 ? ' bad' : ''), percent + ' %'),
-              el('td', 'n' + (exit.blocked ? ' bad' : ''), String(exit.blocked)),
-            );
-            table.append(tr);
-          }
-          const note = 'Только Avito. Загрузка сорвалась — ПК повторяет через следующий сервер.';
-          panel.append(table, el('div', 'muted', note));
-          view.append(panel);
-        }
+        const exits = exitsPanel(d.exits);
+        if (exits) view.append(exits);
 
         const list = el('div', 'panel');
         list.append(el('div', 'muted', 'Последние обходы (новые сверху)'));
@@ -1717,40 +2929,1828 @@
         view.append(list);
       }
 
-      function showItem(listingId) {
-        if (!listingId) return;
-        state.item = listingId;
-        state.findBack = false;
+      /**
+       * «Через что ходили (сутки)»: Avito по выходам (решение владельца 05.10.2026) — видно, помогают ли российские
+       * серверы. Выход без обходов за сутки — только у старых обходов из списка.
+       */
+      function exitsPanel(all) {
+        const exits = all.filter((exit) => exit.runs > 0);
+        if (exits.length === 0) return null;
+        const panel = el('div', 'panel');
+        panel.append(el('div', 'muted', 'Через что ходили (сутки)'));
+        const table = el('table', 'qtable');
+        const head = el('tr');
+        for (const title of ['Сервер, IP', 'Обходов', 'Удачно', 'Блоков']) head.append(el('th', '', title));
+        table.append(head);
+        for (const exit of exits) {
+          const where = el('td', '', exit.label);
+          if (exit.ip) where.append(el('div', 'sub', exit.ip));
+          const percent = Math.round((exit.ok * 100) / exit.runs);
+          const tr = el('tr');
+          tr.append(
+            where,
+            el('td', 'n', String(exit.runs)),
+            el('td', 'n' + (percent >= 80 ? ' good' : percent < 50 ? ' bad' : ''), percent + ' %'),
+            el('td', 'n' + (exit.blocked ? ' bad' : ''), String(exit.blocked)),
+          );
+          table.append(tr);
+        }
+        const note = 'Только Avito. Загрузка сорвалась — ПК повторяет через следующий сервер.';
+        panel.append(table, el('div', 'muted', note));
+        return panel;
+      }
+
+      /** Отметить нажатую кнопку группы (aria-pressed) по data-key. */
+      function pressed(container, key) {
+        for (const button of container.children) {
+          button.setAttribute('aria-pressed', String(button.dataset.key === String(key)));
+        }
+      }
+
+      /**
+       * Вкладка «📊 Обходы» по профилю статистики (TZ.md «Поиск по моделям, страница обхода и графики», шаг 5), сверху
+       * вниз: находки, «Новые объявления», плитки за сутки, «Цены моделей», «Обходы», «Запросы за сутки», выходы.
+       */
+      function renderProfile(view, p) {
+        if (state.statsOnly) {
+          view.append(el('div', 'muted', 'Данные на ' + dataTime(p.at) + ', кнопка табло обновляется раз в 5 минут.'));
+        }
+        const pausedUntil = Number(p.day[9]) || 0;
+        if (pausedUntil > nowMinute()) {
+          const why = p.pauseReason ? ': ' + p.pauseReason : '';
+          view.append(el('div', 'pause-banner', 'Avito на паузе до ' + minuteDate(pausedUntil) + why));
+        }
+        const finds = el('div', 'finds');
+        fillFinds(finds, findGroups());
+        const card = el('div', 'panel chart-card');
+        view.append(finds, card);
+        newListingsCard(card, p);
+        view.append(dayTiles(p));
+        const prices = priceList(p);
+        if (prices) view.append(prices);
+        view.append(runsSection(p));
+        const queries = queriesSection(p);
+        if (queries) view.append(queries);
+        const exits = exitsPanel(p.exits);
+        if (exits) view.append(exits);
+        view.append(briefAction());
+        const cut = cutNotice(p);
+        if (cut) view.append(cut);
+      }
+
+      /** Пульс на ярлыке «📊 Обходы»: есть обход с живой находкой моложе 60 минут. */
+      function statsPulse() {
+        if (!state.profile) return false;
+        const since = nowMinute() - 60;
+        return state.profile.runs.some((run) => has(run.flags, 2) && run.minute >= since);
+      }
+
+      const NEW_PERIODS = [
+        ['1d', '1Д'],
+        ['1w', '1Н'],
+        ['1m', '1М'],
+        ['all', 'Всё'],
+      ];
+
+      /**
+       * Карточка «Новые объявления»: крупно — число за период, чип «▲ 12 % · +23» к прошлому такому же периоду, график
+       * (пунктир — первыми нашли поиски по моделям, красные точки — находки), переключатель 1Д · 1Н · 1М · Всё.
+       */
+      function newListingsCard(card, p) {
+        card.append(el('div', 'chart-label', 'Новые объявления'));
+        const periods = NEW_PERIODS.filter(([key]) => newSeries(p, key));
+        if (periods.length === 0) {
+          card.append(el('div', 'muted', 'График не поместился в ссылку.'));
+          return;
+        }
+        const head = el('div', 'chart-head');
+        const value = el('div', 'chart-value');
+        const chip = el('span', 'chip');
+        head.append(value, chip);
+        const sub = el('div', 'chart-sub');
+        const box = el('div');
+        const switcher = el('div', 'periods');
+        const share = el('div', 'muted');
+        const starts = el('div', 'muted tiny');
+        card.append(head, sub, box, switcher, share, starts);
+        let data = null;
+        const chart = lineChart(box, {
+          floorZero: true,
+          emptyText: 'За этот период данных нет.',
+          tip: (point) => ({ value: fmt(point.y), label: point.label }),
+          summary: () => (data ? 'Новые объявления ' + data.title + ': ' + fmt(data.total) : 'Новые объявления'),
+          onScrub: (point) => showHead(point),
+        });
+
+        function showHead(point) {
+          if (!data) return;
+          value.textContent = fmt(point ? point.y : data.total);
+          chip.hidden = Boolean(point) || !data.chip;
+          if (data.chip) {
+            chip.textContent = data.chip.text;
+            chip.className = 'chip ' + data.chip.tone;
+          }
+          sub.textContent = point ? newPointNote(point) : data.title;
+        }
+
+        function select(key, animate) {
+          const next = newSeries(p, key);
+          if (!next) return;
+          data = next;
+          state.newPeriod = key;
+          pressed(switcher, key);
+          chart.update(data.points, { animate, tone: data.chip ? data.chip.tone : 'accent' });
+          showHead(null);
+          const part = data.total > 0 ? Math.round((data.model * 100) / data.total) : 0;
+          share.textContent = 'из них первыми нашли поиски по моделям: ' + fmt(data.model) + ' (' + part + ' %)';
+          share.hidden = data.total === 0;
+          starts.textContent = data.starts.length ? 'Не в графике: ' + data.starts.join('; ') + '.' : '';
+        }
+
+        for (const [key, label] of periods) {
+          const button = el('button', '', label);
+          button.type = 'button';
+          button.dataset.key = key;
+          button.addEventListener('click', () => {
+            if (state.newPeriod === key) return;
+            haptic('select');
+            select(key, true);
+          });
+          switcher.append(button);
+        }
+        select(periods.some(([key]) => key === state.newPeriod) ? state.newPeriod : periods[0][0], false);
+      }
+
+      /**
+       * Ряд «Новые объявления» за период: 1Д — 24 часа, 1Н — 7 дней по 6 часов, 1М — 30 дней, Всё — по дням (история
+       * длиннее 120 дней — по неделям). Последний шаг периода — текущий, неполный, поэтому прошлый период — той же
+       * длины, что показанный (до момента данных), а не полный: шаги на его границах входят долей по времени. Дни в
+       * ссылку вошли только за 30 (o.c = 1) — «Всё» повторило бы «1М», его нет.
+       */
+      function newSeries(p, key) {
+        const c = p.series;
+        if (!c) return null;
+        if (key === '1d') {
+          if (!Array.isArray(c.h)) return null;
+          const points = minutePoints({ all: c.h, model: c.hm, finds: c.hf }, c.h0, 60);
+          const prev = coveredSum(c.q, c.q0, 360, c.h0 - (p.atMinute - c.h0), c.h0);
+          return newResult(p, points, prev, 'за 24 часа', 'к прошлым суткам');
+        }
+        if (key === '1w') {
+          if (!Array.isArray(c.q)) return null;
+          const points = minutePoints({ all: c.q, model: c.qm, finds: c.qf }, c.q0, 360);
+          const prev = coveredSum(c.d, dayMinute(p, c.d0), 1440, c.q0 - (p.atMinute - c.q0), c.q0);
+          return newResult(p, points, prev, 'за 7 дней', 'к прошлой неделе');
+        }
+        if (!Array.isArray(c.d)) return null;
+        if (key === '1m') {
+          const skip = Math.max(0, c.d.length - 30);
+          const start = dayMinute(p, c.d0 + skip);
+          const prev = coveredSum(c.d, dayMinute(p, c.d0), 1440, start - (p.atMinute - start), start);
+          return newResult(p, dayPoints(p, c, skip), prev, 'за 30 дней', 'к прошлым 30 дням');
+        }
+        if (p.cut && p.cut.c >= 1) return null;
+        const all = Array.isArray(c.w) ? weekPoints(p, c) : dayPoints(p, c, 0);
+        return newResult(p, all, null, all.length ? 'с ' + dayLabel(all[0].x, false) : 'за всё время', '');
+      }
+
+      /** Сумма ряда за окно [from, to), если ряд покрывает его целиком; иначе — null (чипа нет). */
+      function coveredSum(values, start, step, from, to) {
+        if (!Array.isArray(values) || !isNum(start) || start > from) return null;
+        return Math.round(ChartMath.windowSum(values, start, step, from, to));
+      }
+
+      /** Точка «Новых»: x, новых, из них моделями, находок (красная отметка), шаг [from, to) в минутах, подпись. */
+      function newPoint(values, index, x, range, label) {
+        const finds = Number((values.finds || [])[index]) || 0;
+        return {
+          x,
+          y: Number(values.all[index]) || 0,
+          y2: Number((values.model || [])[index]) || 0,
+          finds,
+          mark: finds > 0,
+          from: range[0],
+          to: range[1],
+          label,
+        };
+      }
+
+      /** Точки по часам или по 6 часов: x — минута Unix начала шага. */
+      function minutePoints(values, start, step) {
+        return values.all.map((_, index) => {
+          const from = start + index * step;
+          const label = step === 60 ? hourLabel(from) : blockLabel(from);
+          return newPoint(values, index, from, [from, from + step], label);
+        });
+      }
+
+      /** Точки по дням (x — номер дня), с шага skip ряда d. */
+      function dayPoints(p, c, skip) {
+        const values = { all: c.d, model: c.dm, finds: c.df };
+        const points = [];
+        for (let index = skip; index < c.d.length; index++) {
+          const day = c.d0 + index;
+          const range = [dayMinute(p, day), dayMinute(p, day + 1)];
+          points.push(newPoint(values, index, day, range, dayLabel(day)));
+        }
+        return points;
+      }
+
+      /** Точки по неделям (x — номер дня понедельника). */
+      function weekPoints(p, c) {
+        const values = { all: c.w, model: c.wm, finds: c.wf };
+        return c.w.map((_, index) => {
+          const day = c.w0 + index * 7;
+          const range = [dayMinute(p, day), dayMinute(p, day + 7)];
+          return newPoint(values, index, day, range, 'неделя с ' + dayLabel(day, false));
+        });
+      }
+
+      /** «14:00–15:00» (не сегодня — «вчера, 23:00–00:00»). */
+      function hourLabel(from) {
+        const day = dayHint(from);
+        return (day ? day + ', ' : '') + clock(from) + '–' + clock(from + 60);
+      }
+
+      /** «пн, 5 окт., 12:00–18:00». */
+      function blockLabel(from) {
+        const options = { weekday: 'short', day: 'numeric', month: 'short' };
+        const date = new Date(from * 60_000).toLocaleDateString('ru-RU', options);
+        return date + ', ' + clock(from) + '–' + clock(from + 360);
+      }
+
+      /** Итог периода: сумма, из них моделями, чип к прошлому периоду, подпись, старты поисков (их нет в ряду). */
+      function newResult(p, points, prev, title, prevTitle) {
+        let total = 0;
+        let model = 0;
+        for (const point of points) {
+          total += point.y;
+          model += point.y2;
+        }
+        const chip = prev === null ? null : changeChip(total, prev);
+        const from = points.length ? points[0].from : 0;
+        const to = points.length ? points[points.length - 1].to : 0;
+        const starts = startsIn(p, from, to);
+        return { points, total, model, chip, title: chip ? title + ' · ' + prevTitle : title, starts };
+      }
+
+      /** Чип «▲ 12 % · +23» к прошлому такому же периоду: больше — зелёный, меньше — красный. */
+      function changeChip(total, prev) {
+        const diff = total - prev;
+        const pct = ChartMath.changePercent(prev, total);
+        const tone = diff >= 0 ? 'up' : 'down';
+        const arrow = diff >= 0 ? '▲ ' : '▼ ';
+        if (pct === null) return { text: arrow + signed(diff), tone };
+        return { text: arrow + Math.abs(pct) + ' % · ' + signed(diff), tone };
+      }
+
+      /** Старты поисков в [from, to): их объявления в ряды не входят — «старт поиска Catty Noir: +41 в базу». */
+      function startsIn(p, from, to) {
+        const out = [];
+        for (const start of (p.series && p.series.b) || []) {
+          if (start[0] >= from && start[0] < to) out.push(startText(start));
+        }
+        return out;
+      }
+
+      function startText([, targetId, count, query]) {
+        const what = targetId ? 'поиска ' + targetName(targetId) : 'запроса «' + (query || '?') + '»';
+        return 'старт ' + what + ': +' + fmt(count) + ' в базу';
+      }
+
+      /** Протяжка по «Новым»: шаг, из них моделями, находки, старты поисков. */
+      function newPointNote(point) {
+        const parts = [point.label];
+        if (point.y2 > 0) parts.push('моделями ' + fmt(point.y2));
+        if (point.finds > 0) parts.push(countText(point.finds, 'находка', 'находки', 'находок'));
+        return parts.concat(startsIn(state.profile, point.from, point.to)).join(' · ');
+      }
+
+      /** Плитка: число и подпись (kind — good или bad). */
+      function tile(parent, label, value, kind) {
+        const box = el('div', 'card' + (kind ? ' ' + kind : ''));
+        box.append(el('div', 'num', String(value)), el('div', 'muted', label));
+        parent.append(box);
+      }
+
+      /** Плитки за сутки 2×2 и «Ещё»: блоки, ошибки, новые модели, объявлений в базе. */
+      function dayTiles(p) {
+        const day = (index) => Number(p.day[index]) || 0;
+        const box = el('div');
+        const cards = el('div', 'cards');
+        const percent = day(0) ? Math.round((day(1) * 100) / day(0)) : 0;
+        tile(cards, 'обходов за сутки', fmt(day(0)));
+        tile(cards, 'удачных', percent + ' %', percent >= 80 ? 'good' : percent < 50 && day(0) ? 'bad' : '');
+        tile(cards, 'новых объявлений', fmt(day(5)), day(5) ? 'good' : '');
+        tile(cards, 'находок прислано', fmt(day(6)), day(6) ? 'good' : '');
+        const more = el('details', 'more');
+        const extra = el('div', 'cards');
+        tile(extra, 'блоков', fmt(day(2)), day(2) ? 'bad' : '');
+        tile(extra, 'ошибок', fmt(day(3)), day(3) ? 'bad' : '');
+        tile(extra, 'новых моделей', fmt(day(7)));
+        tile(extra, 'объявлений в базе', fmt(day(8)));
+        more.append(el('summary', '', 'Ещё'), extra);
+        box.append(cards, more);
+        return box;
+      }
+
+      /**
+       * «Цены моделей» — как активы в Wallet: фото (живая находка — пульс), название, спарклайн за неделю, изменение,
+       * «медиана 7 400 ₽ · 9 продаются». Сначала модели с живой находкой, затем по числу объявлений.
+       */
+      function priceList(p) {
+        const cut = (p.cut && p.cut.m) || 0;
+        if (p.models.length === 0 && cut === 0) return null;
+        const box = el('div');
+        box.append(el('div', 'section-title', 'Цены моделей'));
+        const live = new Set(liveFinds().map((find) => find.targetId));
+        const rank = (model) => (live.has(model.targetId) ? 1_000_000 : 0) + lightTarget(p, model.targetId).selling;
+        for (const model of [...p.models].sort((a, b) => rank(b) - rank(a))) {
+          box.append(assetRow(p, model, live.has(model.targetId)));
+        }
+        if (cut > 0) {
+          const text = countText(cut, 'модель', 'модели', 'моделей') + ' без графика — не поместились в ссылку.';
+          box.append(el('div', 'muted tiny', 'Ещё ' + text));
+        }
+        return box;
+      }
+
+      function assetRow(p, model, live) {
+        const target = lightTarget(p, model.targetId);
+        const row = el('button', 'asset');
+        row.type = 'button';
+        const image = { name: target.name, img: target.img };
+        row.append(live ? liveThumb(image) : thumb(image, 'thumb'));
+        const week = pricePoints(model, 7);
+        const last = week.length ? week[week.length - 1] : null;
+        const parts = [];
+        if (last) parts.push('медиана ' + rub(last.y));
+        parts.push(fmt(target.selling) + ' ' + plural(target.selling, 'продаётся', 'продаются', 'продаются'));
+        const info = el('span', 'info');
+        info.append(el('span', 'name', target.name), el('span', 'sub', parts.join(' · ')));
+        const right = el('span', 'right');
+        right.append(sparkline(week));
+        const change = last && week.length >= 2 ? ChartMath.changePercent(week[0].y, last.y) : null;
+        if (change !== null) right.append(priceChange(change));
+        row.append(info, right);
+        row.addEventListener('click', () => openScreen({ type: 'price', targetId: model.targetId }));
+        return row;
+      }
+
+      /** Спарклайн 64×28 — медиана за неделю, цветом акцента. */
+      function sparkline(points) {
+        const box = svgEl('svg', 'spark');
+        box.setAttribute('viewBox', '0 0 64 28');
+        box.setAttribute('aria-hidden', 'true');
+        if (points.length < 2) return box;
+        const [low, high] = ChartMath.extent(points.map((point) => point.y));
+        const first = points[0].x;
+        const span = points[points.length - 1].x - first || 1;
+        const screen = points.map((point) => ({
+          x: 2 + ((point.x - first) / span) * 60,
+          y: high === low ? 14 : 3 + ((high - point.y) / (high - low)) * 22,
+        }));
+        const line = svgEl('path', 'spark-line');
+        line.setAttribute('d', ChartMath.monotonePath(screen));
+        box.append(line);
+        return box;
+      }
+
+      /** Изменение цены: дешевеет — «▼ 6 %» зелёным (для покупателя), дорожает — «▲ 4 %» красным. */
+      function priceChangeParts(change) {
+        if (change === 0) return { text: '0 %', tone: '' };
+        return { text: (change < 0 ? '▼ ' : '▲ ') + Math.abs(change) + ' %', tone: change < 0 ? 'up' : 'down' };
+      }
+
+      function priceChange(change) {
+        const parts = priceChangeParts(change);
+        return el('span', 'chip small ' + parts.tone, parts.text);
+      }
+
+      /**
+       * Точки цены модели по дням за последние days дней: x — номер дня, y — медиана ₽, low — минимум. Дней без кукол
+       * нет; меньше 3 кукол за день — бледная точка («мало данных»).
+       */
+      function pricePoints(model, days) {
+        const last = model.d0 + model.counts.length - 1;
+        const points = [];
+        model.counts.forEach((count, index) => {
+          const day = model.d0 + index;
+          if (!(count > 0) || day <= last - days) return;
+          const finds = Number(model.finds[index]) || 0;
+          points.push({
+            x: day,
+            y: model.median[index],
+            low: model.min[index],
+            count,
+            finds,
+            mark: finds > 0,
+            faint: count < 3,
+          });
+        });
+        return points;
+      }
+
+      /** Фильтры «Обходов»: ключ, подпись, условие. */
+      const RUN_FILTERS = [
+        ['all', 'Все', () => true],
+        ['general', 'Общие', (run) => run.kind === 0 || run.kind === 3],
+        ['model', 'Модели', (run) => run.kind === 1],
+        ['fresh', 'С новыми', (run) => run.fresh > 0],
+        ['finds', 'Находки', (run) => run.finds > 0],
+        ['failed', 'Сбои', (run) => run.outcome === 2 || run.outcome === 3],
+        ['checks', '⭐', (run) => run.kind === 2 || run.kind === 4],
+      ];
+
+      /** «Обходы»: чипы-фильтры с числами и строки обходов; нажатие — страница обхода. */
+      function runsSection(p) {
+        const box = el('div');
+        box.append(el('div', 'section-title', 'Обходы'));
+        if (p.runs.length === 0) {
+          const cut = p.cut && p.cut.r;
+          box.append(el('div', 'muted', cut ? 'Обходы не поместились в ссылку.' : 'Обходов ещё не было.'));
+          return box;
+        }
+        const chips = el('div', 'chips');
+        const list = el('div');
+        box.append(chips, list);
+        const filters = RUN_FILTERS.filter(([key, , test]) => key === 'all' || p.runs.some(test));
+        const select = (key) => {
+          state.runFilter = key;
+          pressed(chips, key);
+          fillRuns(list, p, key);
+        };
+        for (const [key, label, test] of filters) {
+          const chip = el('button', 'fchip', label);
+          chip.type = 'button';
+          chip.dataset.key = key;
+          const count = p.runs.filter(test).length;
+          chip.append(el('span', 'n', fmt(count)));
+          if (key === 'checks') chip.setAttribute('aria-label', 'Проверки страниц: ' + count);
+          chip.addEventListener('click', () => {
+            haptic('select');
+            select(key);
+          });
+          chips.append(chip);
+        }
+        select(filters.some(([key]) => key === state.runFilter) ? state.runFilter : 'all');
+        box.append(el('div', 'muted tiny', 'Последние обходы и «интересные» за сутки: с находками, с новыми, сбои.'));
+        return box;
+      }
+
+      function fillRuns(list, p, key) {
+        list.textContent = '';
+        const filter = RUN_FILTERS.find(([id]) => id === key) || RUN_FILTERS[0];
+        for (const run of p.runs.filter(filter[2])) list.append(runRow(p, run));
+        const note = detailsNote(p);
+        if (note) list.append(el('div', 'muted tiny', note));
+      }
+
+      /**
+       * «Подробности — у последних 5 обходов и у «интересных» за сутки, у остальных — в полном режиме»: только если
+       * подробности влезли не у всех (o.d); последние — те, что в r до первой строки без подробностей.
+       */
+      function detailsNote(p) {
+        if (!p.cut || !p.cut.d || p.detailed === null) return '';
+        const latest = p.detailed > 0 ? 'у последних ' + countText(p.detailed, 'обхода', 'обходов', 'обходов') : '';
+        const where = [latest, p.interesting > 0 ? 'у «интересных» за сутки' : ''].filter(Boolean).join(' и ');
+        if (!where) return 'Подробности обходов не поместились в ссылку — они в полном режиме.';
+        return 'Подробности — ' + where + ', у остальных — в полном режиме.';
+      }
+
+      /**
+       * Строка обхода (от 56 px, нажимается целиком): полоса слева по итогу, время (не сегодня — «вчера»), значок, что
+       * искали, итог, мелко — сервер, длительность, ожидание в очереди. С живой находкой — фон находки и пульс.
+       */
+      function runRow(p, run) {
+        const row = el('button', 'rrow o' + run.outcome);
+        row.type = 'button';
+        const live = has(run.flags, 2);
+        if (live) row.classList.add('live');
+        const time = el('span', 't', clock(run.minute));
+        const day = dayHint(run.minute);
+        if (day) time.append(el('span', 'sub', day));
+        const body = el('span', 'body');
+        body.append(el('span', 'l1', runWhat(p, run)), runResult(p, run), el('span', 'sub', runMeta(p, run)));
+        row.append(time, runIcon(p, run, live), body, el('span', 'chev', '›'));
+        row.addEventListener('click', () => openScreen({ type: 'run', id: run.id }));
+        return row;
+      }
+
+      /** Значок: фото модели, 🔎 общий, ⭐ «Слежу», 🔴 автопроверка, ⚙ разовый; с живой находкой — пульс. */
+      function runIcon(p, run, live) {
+        const wrap = el('span', 'ic');
+        const target = run.kind === 1 ? lightTarget(p, run.about) : null;
+        if (target) wrap.append(thumb({ name: target.name, img: target.img }, 'ic-img'));
+        else wrap.append(el('span', '', RUN_ICON[run.kind] || '🔎'));
+        if (live) wrap.append(pulse());
+        return wrap;
+      }
+
+      /** Что искали: запрос, модель с порогом на момент обхода, заголовок проверенного объявления. */
+      function runWhat(p, run) {
+        if (run.kind === 0) return String(run.about || 'запрос');
+        if (run.kind === 1) {
+          const name = targetName(run.about);
+          return run.thresholdRub ? name + ' · до ' + rub(run.thresholdRub) : name;
+        }
+        if (run.kind === 3) return 'разовый обход';
+        const listing = p.listings.get(run.about);
+        if (listing) return listing.title;
+        return run.kind === 2 ? 'объявление из «⭐ Слежу»' : 'проверка находки';
+      }
+
+      /** «✓ 50 · +3 новых · 1 находка» или «✗ связь оборвалась · 2 попытки». */
+      function runResult(p, run) {
+        if (run.outcome === 4) return el('span', 'l2', '… идёт');
+        if (run.outcome === 1) return el('span', 'l2 grey', RUN_ERROR_TEXT[11]);
+        if (run.outcome === 0) return el('span', 'l2', runSuccess(run));
+        const kind = run.outcome === 2 ? 'warn' : 'bad';
+        return el('span', 'l2 ' + kind, '✗ ' + runError(p, run) + attemptsNote(run));
+      }
+
+      function runSuccess(run) {
+        if (run.kind === 2 || run.kind === 4) return '✓ страница открылась';
+        const parts = ['✓ ' + fmt(run.found || 0)];
+        if (run.fresh > 0) parts.push('+' + countText(run.fresh, 'новое', 'новых', 'новых'));
+        if (run.cheaper > 0) parts.push(countText(run.cheaper, 'подешевело', 'подешевели', 'подешевели'));
+        if (run.finds > 0) parts.push(countText(run.finds, 'находка', 'находки', 'находок'));
+        return parts.join(' · ');
+      }
+
+      function attemptsNote(run) {
+        return run.attempts > 1 ? ' · ' + countText(run.attempts, 'попытка', 'попытки', 'попыток') : '';
+      }
+
+      /** Фраза ошибки обхода по словарю: сервер у «не ответил», время паузы у блока, сырой текст у «другого». */
+      function runError(p, run) {
+        const exit = p.exits[run.exit];
+        return errorPhrase(p, run.code, exit ? exit.label : null, run.errorText, run);
+      }
+
+      /** Время паузы — только у блока, после которого Avito на паузе сейчас; у прошлых блоков — без него. */
+      function errorPhrase(p, code, server, raw, run) {
+        if (code === 6 && server && server !== 'напрямую') return 'сервер ' + server + ' не ответил';
+        const until = Number(p.day[9]) || 0;
+        if (code === 8 && until > run.minute && pauseRunId(p) === run.id) {
+          return 'Avito закрыл доступ — пауза до ' + clock(until);
+        }
+        if (code === 15 && raw) return raw;
+        if (!code) return 'сбой';
+        return RUN_ERROR_TEXT[code] || RUN_ERROR_TEXT[15];
+      }
+
+      /** Обход, после которого Avito на паузе сейчас: самый новый блок (код 8), если после него удачных не было. */
+      function pauseRunId(p) {
+        for (const run of p.runs) {
+          if (run.outcome === 0) return null;
+          if (run.code === 8) return run.id;
+        }
+        return null;
+      }
+
+      /** Мелкая строка: сервер, длительность, ожидание в очереди, страница, первый обход. */
+      function runMeta(p, run) {
+        const parts = [];
+        const exit = p.exits[run.exit];
+        if (exit) parts.push(exit.label);
+        if (isNum(run.seconds)) parts.push(duration(run.seconds));
+        if (isNum(run.wait)) parts.push('ждал ' + duration(run.wait));
+        if (run.page > 1) parts.push('стр. ' + run.page);
+        if (has(run.flags, 1)) parts.push('первый обход');
+        return parts.join(' · ');
+      }
+
+      /** «Запросы за сутки» по группам: «Общие», «По моделям», «Проверки страниц». */
+      function queriesSection(p) {
+        if (p.groups.length === 0 && p.queries.length === 0) return null;
+        const box = el('div');
+        box.append(el('div', 'section-title', 'Запросы за сутки'));
+        for (const group of p.groups) {
+          box.append(
+            groupPanel(
+              group,
+              p.queries.filter((query) => query.group === group.group),
+            ),
+          );
+        }
+        const known = new Set(p.groups.map((group) => group.group));
+        const rest = p.queries.filter((query) => !known.has(query.group));
+        if (rest.length > 0) box.append(groupPanel(null, rest));
+        if (p.cut && p.cut.q) box.append(el('div', 'muted tiny', 'Запросы по отдельности не поместились в ссылку.'));
+        return box;
+      }
+
+      /** Группа: интервал и причина замедления, итог за сутки, ожидание в очереди; строки запросов группы. */
+      function groupPanel(group, rows) {
+        const panel = el('div', 'panel');
+        if (group) {
+          panel.append(el('div', 'group-title', groupTitle(group)), el('div', 'sub', groupDay(group)));
+          const queue = queueText(group);
+          if (queue) panel.append(el('div', 'sub', queue));
+        }
+        if (rows.length > 0) panel.append(queryTable(rows, group ? group.group : 0));
+        return panel;
+      }
+
+      /** «🎯 По моделям · 6 моделей · раз в ~24 мин (цель 10) · сейчас: лимит Avito». */
+      function groupTitle(group) {
+        const parts = [GROUP_TITLE[group.group] || 'Другое'];
+        if (group.group === 0 && group.urls > 0) parts.push(countText(group.urls, 'запрос', 'запроса', 'запросов'));
+        if (group.group === 1 && group.urls > 0) parts.push(countText(group.urls, 'модель', 'модели', 'моделей'));
+        if (group.group !== 2) {
+          const every = group.every >= 0 ? 'раз в ~' + group.every + ' мин' : 'за 3 ч не было';
+          parts.push(group.target > 0 ? every + ' (цель ' + group.target + ')' : every);
+        }
+        if (group.slow > 0) parts.push('сейчас: ' + slowText(group));
+        return parts.join(' · ');
+      }
+
+      function slowText(group) {
+        const text = RunText.slow[group.slow] || 'причина неизвестна';
+        return group.slow === 4 && group.slowUntil > 0 ? text + ' до ' + clock(group.slowUntil) : text;
+      }
+
+      /** Итог группы за сутки; у моделей — «нашла только модель». */
+      function groupDay(group) {
+        const percent = group.runs ? Math.round((group.ok * 100) / group.runs) : 0;
+        const runs = countText(group.runs, 'обход', 'обхода', 'обходов') + ' (удачных ' + percent + ' %)';
+        if (group.group === 2) return 'За сутки: ' + runs;
+        const only = (group.group === 1 ? 'нашла только модель ' : 'только им ') + fmt(group.only);
+        const parts = [runs, 'новых ' + fmt(group.fresh), only, 'находок ' + fmt(group.finds)];
+        return 'За сутки: ' + parts.join(', ');
+      }
+
+      function queueText(group) {
+        if (!(group.waitMedian >= 0)) return '';
+        const p90 = group.waitP90 >= 0 ? ', у 90 % — до ' + duration(group.waitP90) : '';
+        return 'Ждут в очереди: обычно ' + duration(group.waitMedian) + p90;
+      }
+
+      /** Строки запросов: что искали (обходов и удачных %) и колонки Новых · Только им · Находок. */
+      function queryTable(rows, group) {
+        const table = el('table', 'qtable');
+        const head = el('tr');
+        head.append(el('th', '', 'Что искали'));
+        for (const title of ['Новых', 'Только им', 'Находок']) head.append(el('th', 'n', title));
+        table.append(head);
+        for (const query of rows) {
+          const name = el('td', '', group === 1 ? query.query.replace(/^🎯\s*/u, '') : query.query);
+          const percent = query.runs ? Math.round((query.ok * 100) / query.runs) : 0;
+          name.append(el('div', 'sub', countText(query.runs, 'обход', 'обхода', 'обходов') + ' · ' + percent + ' %'));
+          const tr = el('tr');
+          tr.append(name, numCell(query.fresh, group), numCell(query.only, group), numCell(query.finds, 0));
+          table.append(tr);
+        }
+        return table;
+      }
+
+      function numCell(value, group) {
+        return el('td', 'n' + (value > 0 ? ' good' : ''), group === 2 ? '—' : fmt(value || 0));
+      }
+
+      const CUT_SERIES = ['графики старше 30 дней', 'графики 1М и Всё', 'график новых объявлений'];
+
+      /** Чего не хватило в ссылке (o): Telegram ограничивает длину кнопки — это не ошибка. */
+      function cutNotice(p) {
+        const cut = p.cut;
+        if (!cut) return null;
+        const parts = [];
+        if (CUT_SERIES[cut.c - 1]) parts.push(CUT_SERIES[cut.c - 1]);
+        if (cut.f) parts.push(countText(cut.f, 'находка', 'находки', 'находок'));
+        if (cut.r) parts.push(countText(cut.r, 'последний обход', 'последних обхода', 'последних обходов'));
+        if (cut.m) parts.push(countText(cut.m, 'график цены', 'графика цены', 'графиков цены'));
+        if (cut.h) parts.push('цена ' + countText(cut.h, 'модели', 'моделей', 'моделей') + ' старше 30 дней');
+        if (cut.l) parts.push(countText(cut.l, 'список «продаются»', 'списка «продаются»', 'списков «продаются»'));
+        if (cut.q) parts.push('запросы по отдельности');
+        if (cut.i) parts.push(countText(cut.i, 'интересный обход', 'интересных обхода', 'интересных обходов'));
+        if (cut.p) parts.push(countText(cut.p, 'фото', 'фото', 'фото'));
+        const box = el('div', 'panel muted');
+        if (parts.length > 0) box.append(el('div', '', 'В ссылку не поместились: ' + parts.join(', ') + '.'));
+        const details = detailsNote(p);
+        if (details) box.append(el('div', '', details));
+        box.append(el('div', 'tiny', 'Telegram ограничивает длину кнопки — это не ошибка.'));
+        return box;
+      }
+
+      /** Страница обхода (TZ.md, шаг 5): заголовок, итог по словарю ошибок, плитки, как грузили, новые объявления. */
+      function renderRun(run) {
+        const p = state.profile;
+        const view = $('detailView');
+        view.textContent = '';
+        view.append(runHead(p, run), el('div', 'muted', runLine(run)), runOutcome(p, run));
+        const banner = findBanner(run);
+        if (banner) view.append(banner);
+        const cards = el('div', 'cards');
+        const count = (value) => (isNum(value) ? fmt(value) : '—');
+        tile(cards, 'найдено', count(run.found));
+        tile(cards, 'новых', count(run.fresh), run.fresh > 0 ? 'good' : '');
+        tile(cards, 'подешевели', count(run.cheaper), run.cheaper > 0 ? 'good' : '');
+        tile(cards, 'находок', fmt(run.finds), run.finds > 0 ? 'good' : '');
+        view.append(cards);
+        // Подробности (списки и попытки) у старых обходов не поместились в ссылку — не ошибка
+        const detailed = run.freshIds !== 0;
+        if (!detailed) view.append(el('div', 'panel muted', 'Подробности старых обходов — в полном режиме.'));
+        const load = loadPanel(p, run);
+        if (load) view.append(load);
+        if (detailed) appendListings(view, p, run);
+        view.append(runActions(p, run), el('div', 'muted tiny', runTech(run)));
+      }
+
+      /** Заголовок: модель (фото 48 px) и порог на момент обхода, «Поиск «…»», «⭐ <заголовок>», «🔴 <заголовок>». */
+      function runHead(p, run) {
+        const head = el('div', 'run-head');
+        const info = el('div', 'info');
+        if (run.kind === 1) {
+          const target = lightTarget(p, run.about);
+          head.append(thumb({ name: target.name, img: target.img }, 'thumb big'));
+          info.append(el('h2', '', target.name));
+          if (run.thresholdRub) info.append(el('div', 'muted', 'до ' + rub(run.thresholdRub) + ' на момент обхода'));
+        } else {
+          info.append(el('h2', '', runTitle(p, run)));
+        }
+        head.append(info);
+        return head;
+      }
+
+      function runTitle(p, run) {
+        if (run.kind === 0) return 'Поиск «' + (run.about || '?') + '»';
+        if (run.kind === 3) return '⚙ Разовый обход';
+        const listing = p.listings.get(run.about);
+        return (run.kind === 2 ? '⭐ ' : '🔴 ') + (listing ? listing.title : 'объявление');
+      }
+
+      /** Под заголовком: когда, сколько шёл, ожидание в очереди, страница догонялки, первый обход. */
+      function runLine(run) {
+        const parts = [whenText(run.minute)];
+        if (isNum(run.seconds)) parts.push('шёл ' + duration(run.seconds));
+        if (isNum(run.wait)) parts.push('ждал в очереди ' + duration(run.wait));
+        if (run.page > 1) parts.push('стр. ' + run.page + ' (догонялка)');
+        if (has(run.flags, 1)) parts.push('первый обход адреса');
+        return parts.join(' · ');
+      }
+
+      /** «14:31», не сегодня — «вчера 14:31». */
+      function whenText(minute) {
+        const day = dayHint(minute);
+        return (day ? day + ' ' : '') + clock(minute);
+      }
+
+      /** Итог крупной строкой — по словарю ошибок. */
+      function runOutcome(p, run) {
+        if (run.outcome === 4) return el('div', 'outcome', '… Обход ещё идёт');
+        if (run.outcome === 1) return el('div', 'outcome grey', RUN_ERROR_TEXT[11]);
+        if (run.outcome === 0) {
+          const text = run.kind === 2 || run.kind === 4 ? '✓ Страница открылась' : '✓ Выдача получена';
+          return el('div', 'outcome ok', text);
+        }
+        const kind = run.outcome === 2 ? 'warn' : 'bad';
+        return el('div', 'outcome ' + kind, '✗ ' + runError(p, run) + attemptsNote(run));
+      }
+
+      /** Находка после обхода — плашка (с пульсом, пока подходит); нажатие — страница объявления. */
+      function findBanner(run) {
+        if (!(run.finds > 0)) return null;
+        const first = Array.isArray(run.findIds) ? run.findIds[0] : undefined;
+        const listing = first === undefined ? null : profileItem(first);
+        const banner = el('button', 'find-banner');
+        banner.type = 'button';
+        if (has(run.flags, 2)) banner.append(pulse());
+        const count = countText(run.finds, 'находка', 'находки', 'находок') + ' после обхода';
+        banner.append(el('span', '', listing ? count + ': ' + listing.title : count));
+        if (listing) banner.addEventListener('click', () => openScreen({ type: 'listing', id: listing.id }));
+        else banner.disabled = true;
+        return banner;
+      }
+
+      const TIMELINE_LEGEND = [
+        ['ok', 'загрузка'],
+        ['wait', 'ждал повтора'],
+        ['settle', 'пауза и разбор'],
+      ];
+
+      /** «Как грузили»: полоска времени задачи и по строке на попытку — сервер, IP, итог, секунды, HTTP. */
+      function loadPanel(p, run) {
+        if (run.attemptList === 0) return null;
+        const panel = el('div', 'panel');
+        panel.append(el('div', 'group-title', 'Как грузили'));
+        const attempts = run.attemptList.map(attemptFromRow);
+        if (attempts.length === 0) {
+          panel.append(el('div', 'muted', 'ПК не сообщил о загрузке страницы.'));
+          return panel;
+        }
+        const bar = timeline(run, attempts);
+        if (bar) panel.append(bar);
+        attempts.forEach((attempt, index) => panel.append(attemptRow(p, run, attempt, index)));
+        return panel;
+      }
+
+      /** Попытка: [выход — строка x, начало от начала задачи с, секунд, код ошибки, HTTP, записано 0|1]. */
+      function attemptFromRow([exit, start, seconds, code, http, recorded]) {
+        return { exit, start, seconds, code: code || 0, http: http || 0, recorded: recorded === 1 };
+      }
+
+      /** Цвет попытки: загрузилась, блок или «подождите», сбой; итог не записан и «ничего не нашёл» — серый. */
+      function attemptTone(attempt) {
+        if (!attempt.recorded || attempt.code === 11) return 'none';
+        if (attempt.code === 0) return 'ok';
+        return attempt.code === 8 || attempt.code === 9 ? 'warn' : 'bad';
+      }
+
+      /** Полоска времени задачи: загрузки (цвет — итог), ожидание повтора 15/30 с, пауза после загрузки и разбор. */
+      function timeline(run, attempts) {
+        if (!attempts.every((attempt) => isNum(attempt.start) && isNum(attempt.seconds))) return null;
+        const last = attempts[attempts.length - 1];
+        const total = Math.max(Number(run.seconds) || 0, last.start + last.seconds);
+        if (!(total > 0)) return null;
+        const bar = el('div', 'timeline');
+        bar.setAttribute('aria-hidden', 'true');
+        const part = (tone, seconds) => {
+          const span = el('span', 'seg-' + tone);
+          span.style.width = (Math.max(0, seconds) * 100) / total + '%';
+          bar.append(span);
+        };
+        let cursor = 0;
+        for (const attempt of attempts) {
+          if (attempt.start > cursor) part('wait', attempt.start - cursor);
+          part(attemptTone(attempt), attempt.seconds);
+          cursor = Math.max(cursor, attempt.start + attempt.seconds);
+        }
+        if (total > cursor) part('settle', total - cursor);
+        const legend = el('div', 'legend');
+        for (const [tone, text] of TIMELINE_LEGEND) {
+          const item = el('span');
+          item.append(el('i', 'seg-' + tone), text);
+          legend.append(item);
+        }
+        legend.append(el('span', '', 'всего ' + duration(total)));
+        const box = el('div');
+        box.append(bar, legend);
+        return box;
+      }
+
+      /** Попытка: сервер и IP, итог по словарю (агент до журнала — «ошибка не записана»), секунды, HTTP. */
+      function attemptRow(p, run, attempt, index) {
+        const row = el('div', 'att');
+        const exit = p.exits[attempt.exit];
+        const where = el('div');
+        where.append(el('b', '', index + 1 + '. ' + (exit ? exit.label : 'выход неизвестен')));
+        if (exit && exit.ip) where.append(el('span', 'muted', ' · ' + exit.ip));
+        const parts = [attemptText(p, run, attempt, exit)];
+        if (isNum(attempt.seconds)) parts.push(duration(attempt.seconds));
+        if (attempt.http) parts.push('HTTP ' + attempt.http);
+        const body = el('div', 'info');
+        body.append(where, el('div', 'sub', parts.join(' · ')));
+        row.append(el('i', 'seg-' + attemptTone(attempt)), body);
+        return row;
+      }
+
+      function attemptText(p, run, attempt, exit) {
+        if (!attempt.recorded) return 'ошибка не записана';
+        if (attempt.code === 0) return 'загрузилась';
+        // «Avito ничего не нашёл» — не ошибка загрузки (серым): страница пришла
+        if (attempt.code === 11) return 'загрузилась, объявлений нет';
+        return errorPhrase(p, attempt.code, exit ? exit.label : null, null, run);
+      }
+
+      /** «Новые (N)», «Подешевели (N)», «Уже знакомые (N)». */
+      function appendListings(view, p, run) {
+        const fresh = run.freshIds.map((id) => p.listings.get(id)).filter(Boolean);
+        if (run.freshIds.length > 0) view.append(el('div', 'section-title', 'Новые (' + run.freshIds.length + ')'));
+        for (const listing of fresh) view.append(listingRow(run, listing, null));
+        const cheaper = Array.isArray(run.cheaperList) ? run.cheaperList : [];
+        if (cheaper.length > 0) view.append(el('div', 'section-title', 'Подешевели (' + cheaper.length + ')'));
+        for (const [id, before] of cheaper) {
+          const listing = p.listings.get(id);
+          if (listing) view.append(listingRow(run, listing, before));
+        }
+        if (isNum(run.known) && run.known > 0) {
+          view.append(el('div', 'panel muted', 'Уже знакомые (' + fmt(run.known) + ') — список в полном режиме.'));
+        }
+      }
+
+      /**
+       * Объявление обхода: фото 56 px, заголовок в две строки, цена (зелёная — не дороже порога), разметка, итог отбора
+       * одной фразой; 🔴 — стало находкой после обхода. Нажатие — страница объявления.
+       */
+      function listingRow(run, listing, before) {
+        const row = el('button', 'lrow');
+        row.type = 'button';
+        const image = { name: listing.title || '?', img: listing.img };
+        row.append(listing.live ? liveThumb(image) : thumb(image, 'thumb'));
+        const info = el('span', 'info');
+        info.append(el('span', 'title', listing.title));
+        const price = before === null ? priceText(listing) : cheaperText(before, listing.priceRub);
+        info.append(el('span', 'cost' + (listing.within ? ' okc' : ''), price));
+        const chips = verdictChips(listing);
+        if (chips) info.append(chips);
+        const threshold = run.kind === 1 && listing.targetId === run.about ? run.thresholdRub : 0;
+        const found = Array.isArray(run.findIds) && run.findIds.includes(listing.id);
+        const verdict = (found ? '🔴 ' : '') + selectionText(listing, threshold);
+        info.append(el('span', 'verdict ' + outcomeClass(listing.outcome), verdict));
+        row.append(info);
+        row.addEventListener('click', () => openScreen({ type: 'listing', id: listing.id }));
+        return row;
+      }
+
+      /** Цена объявления; у лота — и сколько кукол. */
+      function priceText(listing) {
+        if (listing.priceRub === null) return 'без цены';
+        const quantity = listing.verdict && listing.verdict.type === 1 ? listing.verdict.quantity : 1;
+        return quantity > 1 ? rub(listing.priceRub) + ' · ' + quantity + ' шт.' : rub(listing.priceRub);
+      }
+
+      /** Цена за штуку (лот — цена / кукол); без цены — null. */
+      function unitPrice(listing) {
+        if (listing.priceRub === null) return null;
+        const quantity = listing.verdict && listing.verdict.type === 1 ? listing.verdict.quantity : 1;
+        return Math.round(listing.priceRub / quantity);
+      }
+
+      /** Подешевело: «9 900 → 8 500 ₽ (−14 %)». */
+      function cheaperText(before, now) {
+        if (now === null) return 'без цены';
+        if (!isNum(before)) return rub(now);
+        const pct = ChartMath.changePercent(before, now);
+        return fmt(before) + ' → ' + rub(now) + (pct === null ? '' : ' (' + signed(pct) + ' %)');
+      }
+
+      /** Разметка классификатора чипами: «кукла · Catty Noir · 92 %», «лот 3 шт → 2 700 ₽/шт», «одежда», «куплю». */
+      function verdictChips(listing) {
+        const chips = [];
+        const verdict = listing.verdict;
+        if (verdict) {
+          if (verdict.type === 0) chips.push(dollChip(listing, verdict));
+          else if (verdict.type === 1) chips.push(lotChip(listing, verdict));
+          else chips.push(ITEM_TYPE_TEXT[verdict.type] || 'другое');
+          if (verdict.offer > 0) chips.push(OFFER_TEXT[verdict.offer] || 'не продажа');
+          if (verdict.fake) chips.push('подделка?');
+        }
+        if (listing.byModel) chips.push('🎯 нашёл поиск по модели');
+        if (listing.baseline) chips.push('первый обход');
+        if (listing.watched) chips.push('⭐ слежу');
+        if (listing.removed) chips.push('снято');
+        if (chips.length === 0) return null;
+        const box = el('span', 'vchips');
+        for (const text of chips) box.append(el('span', 'vchip', text));
+        return box;
+      }
+
+      function dollChip(listing, verdict) {
+        const parts = ['кукла'];
+        if (listing.targetId) parts.push(targetName(listing.targetId));
+        if (verdict.confidence > 0) parts.push(verdict.confidence + ' %');
+        return parts.join(' · ');
+      }
+
+      function lotChip(listing, verdict) {
+        const unit = unitPrice(listing);
+        return 'лот ' + verdict.quantity + ' шт' + (unit === null ? '' : ' → ' + rub(unit) + '/шт');
+      }
+
+      /** Итог отбора (stats/run-detail.ts Selection, коды 0–8). */
+      const SELECTION_TEXT = [
+        'находка отправлена',
+        'дороже порога',
+        'не кукла',
+        'модель на паузе',
+        'без цены',
+        'ни одной цели',
+        'ещё разбирается',
+        'находка, оценка 👎',
+        'подходит, без сообщения: первый обход модели',
+      ];
+
+      /** Итог отбора одной фразой: «находка, в чате с 14:33», «дороже порога: 9 900 > 8 000», «не кукла: одежда». */
+      function selectionText(listing, thresholdRub) {
+        const code = listing.outcome;
+        if (code === 0 && listing.sentAt) return 'находка, в чате с ' + whenText(listing.sentAt);
+        if (code === 1) return pricierText(listing, thresholdRub);
+        if (code === 2) return notDollText(listing.verdict);
+        if (code === 4 && listing.priceRub !== null) return 'символическая цена';
+        return SELECTION_TEXT[code] || 'итог неизвестен';
+      }
+
+      function pricierText(listing, thresholdRub) {
+        const target = listing.targetId ? findTarget(listing.targetId) || profileTarget(listing.targetId) : null;
+        const threshold = thresholdRub || (target ? target.priceRub : 0);
+        const unit = unitPrice(listing);
+        if (unit === null || !threshold) return 'дороже порога';
+        return 'дороже порога: ' + fmt(unit) + ' > ' + fmt(threshold);
+      }
+
+      function notDollText(verdict) {
+        if (!verdict) return 'не кукла';
+        if (verdict.fake) return 'похоже на подделку';
+        if (verdict.offer > 1) return 'не продажа: ' + (OFFER_TEXT[verdict.offer] || '?');
+        return 'не кукла: ' + (ITEM_TYPE_TEXT[verdict.type] || 'другое');
+      }
+
+      function outcomeClass(code) {
+        if (code === 0) return 'sent';
+        return code === 8 ? 'okc' : '';
+      }
+
+      /** «Открыть этот поиск на Avito» (адрес из БД) и «📈 Цена модели» у обходов модели. */
+      function runActions(p, run) {
+        const actions = el('div', 'actions');
+        const url = isNum(run.url) ? p.urls[run.url] : null;
+        if (url) {
+          const page = run.kind === 2 || run.kind === 4;
+          const open = el('button', '', page ? 'Открыть объявление на Avito' : 'Открыть этот поиск на Avito');
+          open.type = 'button';
+          open.addEventListener('click', () => openLink(url));
+          actions.append(open);
+        }
+        if (run.kind === 1 && profileModel(run.about)) {
+          const chart = el('button', 'ghost', '📈 Цена модели');
+          chart.type = 'button';
+          chart.addEventListener('click', () => openScreen({ type: 'price', targetId: run.about }));
+          actions.append(chart);
+        }
+        return actions;
+      }
+
+      /** Мелко внизу: HTTP, размер HTML, начало и конец. */
+      function runTech(run) {
+        const parts = [];
+        if (run.http) parts.push('HTTP ' + run.http);
+        if (run.kb) parts.push('HTML ' + fmt(run.kb) + ' КБ');
+        parts.push('начало ' + clock(run.minute));
+        if (isNum(run.seconds)) parts.push('конец ~' + clock(run.minute + Math.round(run.seconds / 60)));
+        return parts.join(' · ');
+      }
+
+      const PRICE_PERIODS = [
+        ['1w', '1Н', 7],
+        ['1m', '1М', 30],
+        ['all', 'Всё', Infinity],
+      ];
+      const SELLING_SORTS = [
+        ['cheap', 'дешёвые'],
+        ['new', 'новые'],
+      ];
+      /**
+       * Порог дешевле 500 ₽ — заглушка (1 ₽ у моделей на паузе, «✅ Включить все»), а не цена куклы: как
+       * MODEL_SEARCH_MIN_PRICE_RUB и «дешевле 500 ₽ — не цена куклы» в brief-facts.ts.
+       */
+      const MIN_PRICE_RUB = 500;
+
+      /** Порог модели для графика и подписи; заглушка — 0 (порога нет). */
+      function priceLimit(target) {
+        return target.priceRub >= MIN_PRICE_RUB ? target.priceRub : 0;
+      }
+
+      /** Модели с ценой по дням: включённые первыми, внутри — как в данных (с находкой и поиском по модели выше). */
+      function priceModels(p) {
+        const enabled = (model) => (lightTarget(p, model.targetId).active ? 1 : 0);
+        return [...p.models].sort((a, b) => enabled(b) - enabled(a));
+      }
+
+      /** Экран «Цена модели»: чипы моделей с фото, шапка, график медианы и минимума с порогом, продающиеся куклы. */
+      function renderPrice(screen) {
+        const p = state.profile;
+        const view = $('detailView');
+        view.textContent = '';
+        view.append(el('h2', '', 'Цена модели'));
+        const models = priceModels(p);
+        if (models.length === 0) {
+          view.append(el('div', 'muted', 'Цен моделей по дням в данных нет.'));
+          return;
+        }
+        const chosen = models.find((model) => model.targetId === screen.targetId) || models[0];
+        screen.targetId = chosen.targetId;
+        const chips = el('div', 'chips');
+        const body = el('div');
+        view.append(chips, body);
+        const page = priceView(body, p);
+        for (const model of models) {
+          const target = lightTarget(p, model.targetId);
+          const chip = el('button', 'fchip');
+          chip.type = 'button';
+          chip.dataset.key = String(model.targetId);
+          chip.append(thumb({ name: target.name, img: target.img }, 'chip-img'), el('span', '', target.name));
+          chip.addEventListener('click', () => {
+            if (screen.targetId === model.targetId) return;
+            screen.targetId = model.targetId;
+            haptic('select');
+            pressed(chips, model.targetId);
+            page.show(model, true);
+          });
+          chips.append(chip);
+        }
+        pressed(chips, chosen.targetId);
+        page.show(chosen, false);
+      }
+
+      /** Шапка, график и список одной модели; смена модели и периода — морфингом графика. */
+      function priceView(body, p) {
+        const card = el('div', 'panel chart-card');
+        const name = el('div', 'chart-label');
+        const head = el('div', 'chart-head');
+        const value = el('div', 'chart-value');
+        const chip = el('span', 'chip');
+        head.append(value, chip);
+        const sub = el('div', 'chart-sub');
+        const box = el('div');
+        const switcher = el('div', 'periods');
+        const note = el('div', 'muted tiny');
+        card.append(name, head, sub, box, switcher, note);
+        const list = el('div');
+        body.append(card, list);
+        let model = null;
+        let target = null;
+        let points = [];
+        let allButton = null;
+        const chart = lineChart(box, {
+          tone: 'accent',
+          emptyText: 'График появится, когда наберётся 2 дня.',
+          tip: (point) => ({ value: rub(point.y), label: dayLabel(point.x) }),
+          summary: (shown) => priceSummary(target, shown),
+          onScrub: (point) => showHead(point),
+        });
+        for (const [key, label] of PRICE_PERIODS) {
+          const button = el('button', '', label);
+          button.type = 'button';
+          button.dataset.key = key;
+          button.addEventListener('click', () => {
+            if (state.pricePeriod === key) return;
+            state.pricePeriod = key;
+            haptic('select');
+            draw(true);
+          });
+          if (key === 'all') allButton = button;
+          switcher.append(button);
+        }
+
+        function draw(animate) {
+          // В ссылку вошли только последние 30 дней модели — «Всё» повторило бы «1М»: кнопки нет, показ — за 30 дней
+          const key = state.pricePeriod === 'all' && model.short ? '1m' : state.pricePeriod;
+          const period = PRICE_PERIODS.find((item) => item[0] === key) || PRICE_PERIODS[1];
+          pressed(switcher, period[0]);
+          points = pricePoints(model, period[2]);
+          const limit = priceLimit(target);
+          chart.update(points, { animate, threshold: limit });
+          showHead(null);
+          const legend = limit ? ', штрихи — порог.' : '.';
+          const parts = ['Медиана по отдельным куклам (без лотов), пунктир — минимум' + legend];
+          if (points.some((point) => point.faint)) parts.push('Бледные точки — меньше 3 кукол за день: мало данных.');
+          if (points.some((point) => point.mark)) parts.push('Красные точки — дни находок.');
+          if (model.short) parts.push('Цена старше 30 дней не поместилась в ссылку.');
+          note.textContent = parts.join(' ');
+        }
+
+        function showHead(point) {
+          const last = points.length ? points[points.length - 1] : null;
+          const shown = point || last;
+          value.textContent = shown ? rub(shown.y) : '—';
+          const first = points.length > 1 ? points[0] : null;
+          const change = first && shown && shown !== first ? ChartMath.changePercent(first.y, shown.y) : null;
+          chip.hidden = change === null;
+          if (change !== null) {
+            const parts = priceChangeParts(change);
+            chip.textContent = parts.text;
+            chip.className = 'chip ' + parts.tone;
+          }
+          sub.textContent = point ? priceNote(point) : priceDefault(target, last);
+        }
+
+        return {
+          show(next, animate) {
+            model = next;
+            target = lightTarget(p, next.targetId);
+            const limit = priceLimit(target);
+            let about = limit ? 'порог ' + rub(limit) : 'порог не задан';
+            if (!limit && !target.active) about = 'на паузе';
+            name.textContent = target.name + ' · ' + about;
+            if (allButton) allButton.hidden = model.short;
+            draw(animate);
+            fillSelling(list, p, model, target);
+          },
+        };
+      }
+
+      /** Протяжка: «пн, 5 окт. · медиана 7 400 · мин 5 900 · 12 объявл. · 1 находка». */
+      function priceNote(point) {
+        const parts = [dayLabel(point.x), 'медиана ' + fmt(point.y)];
+        if (isNum(point.low)) parts.push('мин ' + fmt(point.low));
+        parts.push(fmt(point.count) + ' объявл.');
+        if (point.finds > 0) parts.push(countText(point.finds, 'находка', 'находки', 'находок'));
+        if (point.faint) parts.push('мало данных');
+        return parts.join(' · ');
+      }
+
+      /** Под ценой: «медиана · 12 продаются · от 5 900 ₽». */
+      function priceDefault(target, last) {
+        const selling = plural(target.selling, 'продаётся', 'продаются', 'продаются');
+        const parts = ['медиана', fmt(target.selling) + ' ' + selling];
+        if (last && isNum(last.low)) parts.push('от ' + rub(last.low));
+        return parts.join(' · ');
+      }
+
+      function priceSummary(target, points) {
+        if (!target || points.length === 0) return 'График цены: данных нет';
+        const last = points[points.length - 1];
+        return 'Медиана цены ' + target.name + ' по дням: последняя ' + rub(last.y) + ', точек ' + points.length;
+      }
+
+      /** «Продаются сейчас (N)»: живые находки модели и самые дешёвые её куклы; «дешёвые / новые». */
+      function fillSelling(list, p, model, target) {
+        list.textContent = '';
+        const items = sellingItems(model);
+        const total = Math.max(target.selling, items.length);
+        list.append(el('div', 'section-title', 'Продаются сейчас (' + fmt(total) + ')'));
+        if (items.length === 0) {
+          const cut = model.selling === null;
+          list.append(el('div', 'muted', cut ? 'Список не поместился в ссылку.' : 'Кукол в продаже не видели.'));
+          return;
+        }
+        const sorts = el('div', 'chips');
+        const rows = el('div');
+        list.append(sorts, rows);
+        const median = lastMedian(model);
+        const fill = () => {
+          rows.textContent = '';
+          for (const item of sortSelling(items)) rows.append(sellingRow(item, median));
+          pressed(sorts, state.sellingSort);
+        };
+        for (const [key, label] of SELLING_SORTS) {
+          const button = el('button', 'fchip', label);
+          button.type = 'button';
+          button.dataset.key = key;
+          button.addEventListener('click', () => {
+            state.sellingSort = key;
+            haptic('select');
+            fill();
+          });
+          sorts.append(button);
+        }
+        fill();
+        if (total > items.length) {
+          list.append(el('div', 'muted tiny', 'Показаны самые дешёвые: ' + items.length + ' из ' + fmt(total) + '.'));
+        }
+      }
+
+      /** Живые находки модели и самые дешёвые её куклы (m), без повторов и снятых. */
+      function sellingItems(model) {
+        const ids = [];
+        for (const find of liveFinds()) {
+          if (find.targetId === model.targetId && !ids.includes(find.listingId)) ids.push(find.listingId);
+        }
+        for (const id of model.selling || []) {
+          if (!ids.includes(id)) ids.push(id);
+        }
+        const items = [];
+        for (const id of ids) {
+          const item = profileItem(id, model.targetId);
+          if (item && !item.removed) items.push(item);
+        }
+        return items;
+      }
+
+      /** Живые находки первыми, дальше — дешёвые (за штуку) или новые. */
+      function sortSelling(items) {
+        const price = (item) => unitPrice(item) ?? Infinity;
+        const fresh = (item) => item.firstSeen || 0;
+        const order = (a, b) => (state.sellingSort === 'new' ? fresh(b) - fresh(a) : price(a) - price(b) || 0);
+        return [...items].sort((a, b) => Number(b.live) - Number(a.live) || order(a, b));
+      }
+
+      function lastMedian(model) {
+        for (let index = model.counts.length - 1; index >= 0; index--) {
+          if (model.counts[index] > 0) return model.median[index];
+        }
+        return null;
+      }
+
+      /** Строка «Продаются сейчас»: нажатие — страница объявления, «Avito ↗» — сразу на Avito. */
+      function sellingRow(listing, median) {
+        const row = el('div', 'srow');
+        const main = el('button', 'srow-main');
+        main.type = 'button';
+        const image = { name: listing.title || '?', img: listing.img };
+        main.append(listing.live ? liveThumb(image) : thumb(image, 'thumb'));
+        const info = el('span', 'info');
+        info.append(el('span', 'title', listing.title), el('span', 'sub', sellingNote(listing, median)));
+        main.append(info, el('span', 'cost' + (listing.within ? ' okc' : ''), priceText(listing)));
+        const screen = { type: 'listing', id: listing.id, targetId: listing.targetId };
+        main.addEventListener('click', () => openScreen(screen));
+        const avito = el('button', 'small avito', 'Avito ↗');
+        avito.type = 'button';
+        avito.setAttribute('aria-label', 'Открыть на Avito: ' + listing.title);
+        avito.addEventListener('click', () => openLink(listing.url));
+        row.append(main, avito);
+        return row;
+      }
+
+      /** «−12 % к медиане · лот ×3 · видели 2 ч назад · ⭐». */
+      function sellingNote(listing, median) {
+        const parts = [];
+        const unit = unitPrice(listing);
+        const diff = unit === null || !median ? null : ChartMath.changePercent(median, unit);
+        if (diff) parts.push(signed(diff) + ' % к медиане');
+        if (listing.verdict && listing.verdict.type === 1) parts.push('лот ×' + listing.verdict.quantity);
+        if (listing.lastSeen) parts.push('видели ' + ago(listing.lastSeen));
+        if (listing.watched) parts.push('⭐');
+        return parts.join(' · ');
+      }
+
+      /** Объявление профиля (обход, цена модели, находка): страница объявления, итог отбора и разметка. */
+      function renderProfileListing(listing) {
+        renderItemView(listing, listingContext(listing.targetId));
+        const panel = el('div', 'panel');
+        panel.append(el('div', 'muted', 'Отбор'));
+        panel.append(el('div', 'verdict ' + outcomeClass(listing.outcome), selectionText(listing, 0)));
+        const chips = verdictChips(listing);
+        if (chips) panel.append(chips);
+        const view = $('detailView');
+        view.insertBefore(panel, view.querySelector('.actions'));
+      }
+
+      /** Цель объявления для страницы: из «📋 Цели» (с правками) или из профиля; нет — null. */
+      function listingContext(targetId) {
+        const target = targetId ? findTarget(targetId) : null;
+        if (target) return { name: target.name, threshold: current(target).priceRub, targetId };
+        const light = targetId ? profileTarget(targetId) : null;
+        return light ? { name: light.name, threshold: light.priceRub, targetId } : null;
+      }
+
+      const SVG_NS = 'http://www.w3.org/2000/svg';
+      /** Графики на экране: render() их снимает (наблюдатель размера, анимация). */
+      const charts = new Set();
+      let chartCount = 0;
+
+      function svgEl(tag, className) {
+        const node = document.createElementNS(SVG_NS, tag);
+        if (className) node.setAttribute('class', className);
+        return node;
+      }
+
+      function setAttrs(node, attrs) {
+        for (const [name, value] of Object.entries(attrs)) node.setAttribute(name, String(value));
+      }
+
+      function destroyCharts() {
+        for (const chart of charts) chart.destroy();
+        charts.clear();
+      }
+
+      function reducedMotion() {
+        return Boolean(window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches);
+      }
+
+      /** Вертикальные свайпы Telegram (Bot API 7.7+): на время протяжки выключены, чтобы окно не сворачивалось. */
+      function verticalSwipes(on) {
+        try {
+          if (!tg.isVersionAtLeast('7.7')) return;
+          if (on) tg.enableVerticalSwipes();
+          else tg.disableVerticalSwipes();
+        } catch {
+          // клиент без этих вызовов
+        }
+      }
+
+      /**
+       * График «как в Telegram Wallet» (TZ.md, шаг 5) — свой SVG без библиотек: линия с градиентом под ней, пунктиры
+       * второго ряда и минимума, порог, красные отметки находок, подписи минимума и максимума; протяжка пальцем, мышью
+       * и стрелками ←/→ (Esc — убрать). options: { points, height, tone, floorZero, threshold, format, tip(точка) →
+       * { value, label }, summary(точки), emptyText, onScrub(точка | null) }; точка — { x, y, y2?, low?, mark?,
+       * faint? } по возрастанию x. Возвращает { update(точки, { animate, tone, threshold }), destroy() }.
+       */
+      function lineChart(box, options) {
+        chartCount += 1;
+        const fillId = 'chart-fill-' + chartCount;
+        const height = options.height || 180;
+        const format = options.format || fmt;
+        const root = el('div', 'chart tone-' + (options.tone || 'accent'));
+        root.style.height = height + 'px';
+        const surface = svgEl('svg');
+        setAttrs(surface, { height, role: 'img', tabindex: 0 });
+        const defs = svgEl('defs');
+        const gradient = svgEl('linearGradient');
+        setAttrs(gradient, { id: fillId, x1: 0, y1: 0, x2: 0, y2: 1 });
+        const stopTop = svgEl('stop', 'g0');
+        stopTop.setAttribute('offset', '0');
+        const stopBottom = svgEl('stop', 'g1');
+        stopBottom.setAttribute('offset', '1');
+        gradient.append(stopTop, stopBottom);
+        defs.append(gradient);
+        const area = svgEl('path', 'area');
+        area.setAttribute('fill', 'url(#' + fillId + ')');
+        // Пунктиры второго ряда и минимума, порог — под главной линией; при морфинге и прорисовке — как отметки
+        const overlay = svgEl('g', 'overlay');
+        const second = svgEl('path', 'line2');
+        const low = svgEl('path', 'line-low');
+        const limit = svgEl('line', 'thr');
+        const limitLabel = svgEl('text', 'lab');
+        overlay.append(second, low, limit, limitLabel);
+        const line = svgEl('path', 'line');
+        const extras = svgEl('g', 'extras');
+        const cross = svgEl('line', 'cross');
+        const dot = svgEl('circle', 'dot');
+        dot.setAttribute('r', '4.5');
+        surface.append(defs, area, overlay, line, extras, cross, dot);
+        const tip = el('div', 'chart-tip');
+        const empty = el('div', 'chart-empty');
+        root.append(surface, tip, empty);
+        box.append(root);
+        let source = [];
+        let points = [];
+        let screen = [];
+        let xs = [];
+        let width = 0;
+        let active = -1;
+        let dragging = false;
+        let drawn = false;
+        let frame = 0;
+        let drawing = null;
+        hide();
+
+        /** Масштаб: значения (и порог, если он не дальше 1,5 размаха) — на высоту, x — на ширину. */
+        function layout(list) {
+          width = root.clientWidth || box.clientWidth || 320;
+          const values = [];
+          for (const point of list) values.push(point.y, point.y2, point.low);
+          let [lo, hi] = ChartMath.extent(values);
+          if (options.floorZero) lo = 0;
+          const span = hi - lo || Math.abs(hi) || 1;
+          const threshold = options.threshold;
+          let edge = '';
+          if (threshold > 0 && list.length > 0) {
+            if (threshold < lo - 1.5 * span) edge = 'below';
+            else if (threshold > hi + 1.5 * span) edge = 'above';
+            else {
+              lo = Math.min(lo, threshold);
+              hi = Math.max(hi, threshold);
+            }
+          }
+          if (hi === lo) {
+            hi = lo + 1;
+            if (!options.floorZero) lo -= 1;
+          }
+          if (!options.floorZero) {
+            const pad = (hi - lo) * 0.08;
+            lo -= pad;
+            hi += pad;
+          }
+          const top = 22;
+          const bottom = height - 20;
+          const first = list.length ? list[0].x : 0;
+          const last = list.length ? list[list.length - 1].x : 1;
+          const sx = (x) => (last === first ? width / 2 : 6 + ((x - first) / (last - first)) * (width - 12));
+          const sy = (y) => top + ((hi - y) / (hi - lo)) * (bottom - top);
+          return { sx, sy, edge };
+        }
+
+        /** Нарисовать: mode — 'first' (прорисовка), 'morph' (смена периода или модели) или 'none'. */
+        function draw(input, mode) {
+          cancelAnimationFrame(frame);
+          if (drawing) drawing.cancel();
+          drawing = null;
+          line.style.strokeDasharray = '';
+          fade(false);
+          const geo = layout(input);
+          const list = ChartMath.thin(input, Math.max(24, Math.floor(width / 3)));
+          const previous = screen;
+          points = list;
+          screen = list.map((point) => ({ x: geo.sx(point.x), y: geo.sy(point.y) }));
+          xs = screen.map((point) => point.x);
+          surface.setAttribute('aria-label', options.summary ? options.summary(list) : 'График');
+          empty.hidden = list.length >= 2;
+          empty.textContent = options.emptyText || 'Мало данных для графика.';
+          drawExtras(list, geo);
+          if (list.length < 2) {
+            line.setAttribute('d', '');
+            area.setAttribute('d', '');
+            return;
+          }
+          const still = reducedMotion();
+          if (mode === 'morph' && previous.length >= 2 && !still) return morph(previous, screen);
+          setMain(screen);
+          if (mode === 'first' && !still) drawIn();
+        }
+
+        function setMain(list) {
+          const path = ChartMath.monotonePath(list);
+          const first = list[0];
+          const last = list[list.length - 1];
+          line.setAttribute('d', path);
+          area.setAttribute('d', path + 'L' + px(last.x) + ',' + height + 'L' + px(first.x) + ',' + height + 'Z');
+        }
+
+        /** Координаты ряда key (y2 — второй ряд, low — минимум) у точек, где он есть. */
+        function project(list, key, geo) {
+          const out = [];
+          for (const point of list) {
+            if (isNum(point[key])) out.push({ x: geo.sx(point.x), y: geo.sy(point[key]) });
+          }
+          return out;
+        }
+
+        function circle(className, x, y, radius) {
+          const node = svgEl('circle', className);
+          setAttrs(node, { cx: px(x), cy: px(y), r: radius });
+          return node;
+        }
+
+        /** Второй ряд, минимум, порог, отметки находок, бледные точки, подписи минимума и максимума. */
+        function drawExtras(list, geo) {
+          const pathOf = (key) => {
+            const projected = project(list, key, geo);
+            return projected.length >= 2 ? ChartMath.monotonePath(projected) : '';
+          };
+          second.setAttribute('d', pathOf('y2'));
+          low.setAttribute('d', pathOf('low'));
+          drawLimit(geo, list.length > 0);
+          extras.textContent = '';
+          for (const point of list) {
+            const x = geo.sx(point.x);
+            const y = geo.sy(point.y);
+            if (list.length < 2) extras.append(circle('solo', x, y, 4));
+            if (point.faint) extras.append(circle('faint', x, y, 2.5));
+            if (point.mark) extras.append(circle('mark', x, y, 3.5));
+          }
+          if (list.length >= 2) drawLabels(list, geo);
+        }
+
+        /** Подписи максимума и минимума — 11 px у своих точек. */
+        function drawLabels(list, geo) {
+          let top = 0;
+          let bottom = 0;
+          list.forEach((point, index) => {
+            if (point.y > list[top].y) top = index;
+            if (point.y < list[bottom].y) bottom = index;
+          });
+          extras.append(label(list[top], geo, -9));
+          if (list[bottom].y !== list[top].y) extras.append(label(list[bottom], geo, 16));
+        }
+
+        function label(point, geo, shift) {
+          const x = geo.sx(point.x);
+          const y = Math.max(11, Math.min(height - 4, geo.sy(point.y) + shift));
+          const anchor = x < 40 ? 'start' : x > width - 40 ? 'end' : 'middle';
+          const text = svgEl('text', 'lab');
+          setAttrs(text, { x: px(x), y: px(y), 'text-anchor': anchor });
+          text.textContent = format(point.y);
+          return text;
+        }
+
+        /** Порог: штриховая линия с подписью; дальше 1,5 размаха цен — подпись у края со стрелкой. */
+        function drawLimit(geo, any) {
+          const threshold = options.threshold;
+          limit.style.display = 'none';
+          limitLabel.textContent = '';
+          if (!(threshold > 0) || !any) return;
+          const text = 'порог ' + format(threshold);
+          if (geo.edge) {
+            const below = geo.edge === 'below';
+            setAttrs(limitLabel, { x: width - 4, y: below ? height - 4 : 12, 'text-anchor': 'end' });
+            limitLabel.textContent = text + (below ? ' ниже ↓' : ' выше ↑');
+            return;
+          }
+          const y = px(geo.sy(threshold));
+          setAttrs(limit, { x1: 0, x2: width, y1: y, y2: y });
+          limit.style.display = '';
+          setAttrs(limitLabel, { x: width - 4, y: y - 4, 'text-anchor': 'end' });
+          limitLabel.textContent = text;
+        }
+
+        /** Смена периода или модели: старая линия перетекает в новую за 280 мс (по 48 точкам), затем — точный путь. */
+        function morph(from, to) {
+          const count = 48;
+          const left = to[0].x;
+          const right = to[to.length - 1].x;
+          const start = [];
+          const end = [];
+          for (let index = 0; index < count; index++) {
+            const x = left + ((right - left) * index) / (count - 1);
+            start.push({ x, y: ChartMath.sampleAt(from, x) });
+            end.push({ x, y: ChartMath.sampleAt(to, x) });
+          }
+          const began = performance.now();
+          fade(true);
+          const step = (now) => {
+            const t = Math.min(1, (now - began) / 280);
+            const ease = 1 - Math.pow(1 - t, 3);
+            if (t >= 1) {
+              setMain(to);
+              fade(false);
+              return;
+            }
+            setMain(start.map((point, index) => ({ x: point.x, y: point.y + (end[index].y - point.y) * ease })));
+            frame = requestAnimationFrame(step);
+          };
+          frame = requestAnimationFrame(step);
+        }
+
+        /** Первый показ: линия прорисовывается за 600 мс, заливка и отметки проявляются. */
+        function drawIn() {
+          if (typeof line.animate !== 'function' || typeof line.getTotalLength !== 'function') return;
+          const length = line.getTotalLength();
+          const timing = { duration: 600, easing: 'cubic-bezier(0.2, 0.7, 0.2, 1)' };
+          line.style.strokeDasharray = length + ' ' + length;
+          drawing = line.animate([{ strokeDashoffset: length + 'px' }, { strokeDashoffset: '0px' }], timing);
+          drawing.onfinish = () => {
+            line.style.strokeDasharray = '';
+            drawing = null;
+          };
+          for (const layer of [area, overlay, extras]) layer.animate([{ opacity: 0 }, { opacity: 1 }], timing);
+        }
+
+        /**
+         * Отметки, пунктиры и порог уже на новом месте: на время морфинга главной линии они спрятаны сразу (без
+         * перехода), потом проявляются (переход 0,2 с; при prefers-reduced-motion — без него).
+         */
+        function fade(hidden) {
+          for (const layer of [overlay, extras]) {
+            layer.style.transition = hidden ? 'none' : '';
+            layer.style.opacity = hidden ? '0' : '';
+          }
+        }
+
+        /** Перекрестие на точке index: линия, точка, подсказка (значение и дата), шапка через onScrub. */
+        function show(index) {
+          if (index < 0 || index >= screen.length || points.length < 2) return;
+          if (index !== active) haptic('select');
+          active = index;
+          const spot = screen[index];
+          root.classList.add('scrubbing');
+          setAttrs(cross, { x1: px(spot.x), x2: px(spot.x), y1: 0, y2: height });
+          setAttrs(dot, { cx: px(spot.x), cy: px(spot.y) });
+          cross.style.display = '';
+          dot.style.display = '';
+          const info = options.tip ? options.tip(points[index]) : { value: format(points[index].y), label: '' };
+          tip.textContent = '';
+          tip.append(el('b', '', info.value), el('span', '', info.label));
+          tip.hidden = false;
+          const half = tip.offsetWidth / 2;
+          tip.style.left = px(Math.max(half, Math.min(width - half, spot.x))) + 'px';
+          // Точка в полосе подсказки (у верха графика) — подсказка под точкой: точку под пальцем видно всегда
+          const tall = tip.offsetHeight;
+          tip.style.top = (spot.y - 8 < tall ? px(Math.min(height - tall, spot.y + 12)) : 0) + 'px';
+          if (options.onScrub) options.onScrub(points[index]);
+        }
+
+        function hide() {
+          const shown = active !== -1;
+          active = -1;
+          root.classList.remove('scrubbing');
+          cross.style.display = 'none';
+          dot.style.display = 'none';
+          tip.hidden = true;
+          if (shown && options.onScrub) options.onScrub(null);
+        }
+
+        // Протяжка: касание и движение по горизонтали (вертикальный свайп листает страницу — touch-action: pan-y)
+        const pick = (event) => ChartMath.nearestIndex(xs, event.clientX - surface.getBoundingClientRect().left);
+        surface.addEventListener('pointerdown', (event) => {
+          if (points.length < 2) return;
+          dragging = true;
+          try {
+            surface.setPointerCapture(event.pointerId);
+          } catch {
+            // указатель уже отпущен
+          }
+          verticalSwipes(false);
+          show(pick(event));
+        });
+        surface.addEventListener('pointermove', (event) => {
+          if (dragging || event.pointerType === 'mouse') show(pick(event));
+        });
+        const release = () => {
+          if (!dragging) return;
+          dragging = false;
+          verticalSwipes(true);
+          hide();
+        };
+        surface.addEventListener('pointerup', release);
+        surface.addEventListener('pointercancel', release);
+        surface.addEventListener('pointerleave', (event) => {
+          if (event.pointerType === 'mouse' && !dragging) hide();
+        });
+        // Telegram Desktop: стрелки ←/→ — по точкам, Esc — убрать перекрестие
+        surface.addEventListener('keydown', (event) => {
+          if (points.length < 2) return;
+          if (event.key === 'Escape') return hide();
+          if (event.key !== 'ArrowLeft' && event.key !== 'ArrowRight') return;
+          event.preventDefault();
+          const next = active === -1 ? screen.length - 1 : active + (event.key === 'ArrowLeft' ? -1 : 1);
+          show(Math.max(0, Math.min(screen.length - 1, next)));
+        });
+        surface.addEventListener('blur', () => hide());
+
+        // Ширина поменялась (поворот, окно Telegram Desktop) — перерисовать без анимации; тема — через CSS-переменные
+        const observer = typeof ResizeObserver === 'function' ? new ResizeObserver(() => resize()) : null;
+        if (observer) observer.observe(root);
+        function resize() {
+          const next = root.clientWidth;
+          if (!drawn || !next || Math.abs(next - width) < 1) return;
+          hide();
+          draw(source, 'none');
+        }
+
+        const chart = {
+          update(list, settings = {}) {
+            if (settings.tone) root.className = 'chart tone-' + settings.tone;
+            if ('threshold' in settings) options.threshold = settings.threshold;
+            hide();
+            source = list;
+            let mode = 'none';
+            if (!drawn) mode = 'first';
+            else if (settings.animate) mode = 'morph';
+            drawn = true;
+            draw(list, mode);
+          },
+          destroy() {
+            cancelAnimationFrame(frame);
+            if (observer) observer.disconnect();
+            if (dragging) verticalSwipes(true);
+            charts.delete(chart);
+          },
+        };
+        charts.add(chart);
+        if (options.points) chart.update(options.points);
+        return chart;
+      }
+
+      /** Открыть экран поверх текущего; прокрутка под ним запоминается для «Назад». */
+      function openScreen(screen) {
+        state.stack.push({ ...screen, scroll: window.scrollY });
         haptic('select');
         render();
         window.scrollTo(0, 0);
+      }
+
+      /** «Назад»: верхний экран снимается, прокрутка — как была под ним. */
+      function goBack() {
+        const screen = state.stack.pop();
+        render();
+        window.scrollTo(0, screen ? screen.scroll : 0);
+      }
+
+      /** Верхний экран, у которого есть данные (цель удалили, данные обновились — экран снимается); нет — null. */
+      function topScreen() {
+        while (state.stack.length > 0) {
+          const screen = state.stack[state.stack.length - 1];
+          if (screenData(screen)) return screen;
+          state.stack.pop();
+        }
+        return null;
+      }
+
+      function screenData(screen) {
+        if (screen.type === 'model') return findTarget(screen.id);
+        if (screen.type === 'item') {
+          const target = findTarget(screen.targetId);
+          const listing = target ? target.listings.find((item) => item.id === screen.listingId) : null;
+          return listing ? { target, listing } : null;
+        }
+        if (screen.type === 'watch') return state.watched.find((item) => item.id === screen.id) || null;
+        if (screen.type === 'run') return profileRun(screen.id);
+        if (screen.type === 'price') return state.profile;
+        if (screen.type === 'listing') return profileItem(screen.id, screen.targetId);
+        return null;
+      }
+
+      function renderScreen(screen) {
+        const data = screenData(screen);
+        if (screen.type === 'model') renderDetail(data);
+        else if (screen.type === 'item') renderItem(data.target, data.listing);
+        else if (screen.type === 'watch') renderItemView(data, watchContext(data));
+        else if (screen.type === 'run') renderRun(data);
+        else if (screen.type === 'price') renderPrice(screen);
+        else renderProfileListing(data);
+      }
+
+      function watchContext(item) {
+        return item.targetName ? { name: item.targetName, threshold: item.thresholdRub } : null;
+      }
+
+      function showItem(targetId, listingId) {
+        if (!listingId) return;
+        openScreen({ type: 'item', targetId, listingId });
       }
 
       /** Находка из блока «Подходят сейчас»: страница объявления в модели; «Назад» — сразу к списку. */
       function openFind(find) {
-        if (!findTarget(find.targetId)) return openLink(find.url);
-        state.view = find.targetId;
-        state.item = find.listingId;
-        state.findBack = true;
-        haptic('select');
-        render();
-        window.scrollTo(0, 0);
+        const { listingId, targetId } = find;
+        if (findTarget(targetId)) return openScreen({ type: 'item', targetId, listingId });
+        if (state.profile) return openScreen({ type: 'listing', id: listingId, targetId });
+        openLink(find.url);
       }
 
       function render() {
         showError('');
+        destroyCharts();
         renderStale();
-        const target = state.view === null ? null : findTarget(state.view);
-        const watchItem =
-          !target && state.tab === 'watch' && state.watchItem !== null
-            ? state.watched.find((item) => item.id === state.watchItem) || null
-            : null;
-        if (!watchItem) state.watchItem = null;
-        const page = Boolean(target || watchItem);
+        const screen = topScreen();
+        const page = Boolean(screen);
         $('top').hidden = page;
         $('readonly').hidden = !state.readOnly;
         $('bulk').hidden = state.readOnly;
         $('add').hidden = state.readOnly;
+        $('tabs').hidden = state.statsOnly;
+        $('title').textContent = state.statsOnly ? 'Обходы и графики' : 'Цели';
         $('listView').hidden = page || state.tab !== 'targets';
         $('watchView').hidden = page || state.tab !== 'watch';
         $('statsView').hidden = page || state.tab !== 'stats';
@@ -1759,22 +4759,22 @@
         $('tabWatch').classList.toggle('active', state.tab === 'watch');
         $('tabStats').classList.toggle('active', state.tab === 'stats');
         $('watchCount').textContent = watchedCount() ? '(' + watchedCount() + ')' : '';
-        const listing = target && state.item !== null ? target.listings.find((l) => l.id === state.item) : null;
-        if (!listing) state.item = null;
-        if (watchItem) {
-          renderItemView(
-            watchItem,
-            watchItem.targetName ? { name: watchItem.targetName, threshold: watchItem.thresholdRub } : null,
-          );
+        $('tabStatsLive').textContent = '';
+        if (statsPulse()) $('tabStatsLive').append(pulse());
+        if (screen) {
+          // «Назад» — до отрисовки: неожиданные данные не должны оставить экран без выхода
           tg.BackButton.show();
-        } else if (target) {
-          if (listing) renderItem(target, listing);
-          else renderDetail(target);
-          tg.BackButton.show();
+          try {
+            renderScreen(screen);
+          } catch (error) {
+            $('detailView').textContent = '';
+            $('detailView').append(el('div', 'error', 'Не удалось показать: ' + error.message));
+          }
         } else {
-          state.view = null;
-          renderList();
-          renderFinds();
+          if (!state.statsOnly) {
+            renderList();
+            renderFinds();
+          }
           if (state.tab === 'watch') renderWatch();
           if (state.tab === 'stats') renderStats();
           tg.BackButton.hide();
@@ -1787,12 +4787,7 @@
       }
 
       function showDetail(id) {
-        state.view = id;
-        state.item = null;
-        state.findBack = false;
-        haptic('select');
-        render();
-        window.scrollTo(0, 0);
+        openScreen({ type: 'model', id });
       }
 
       function openLink(url) {
@@ -1808,7 +4803,7 @@
         if (state.readOnly) return;
         if (target.id < 0) {
           state.added = state.added.filter((t) => t !== target);
-          state.view = null;
+          state.stack = [];
           haptic('select');
           return render();
         }
@@ -1821,7 +4816,7 @@
           if (!ok) return;
           state.deleted.add(target.id);
           state.dirty.delete(target.id);
-          state.view = null;
+          state.stack = [];
           haptic('warning');
           render();
         };
@@ -1973,6 +4968,8 @@
         state.targets = body.targets.map(normalize);
         state.watched = (body.w || []).map(watchFromRow);
         state.dashboard = dashboardFrom(body.d);
+        // S — профиль статистики целиком (графики, цены моделей, страницы обходов)
+        state.profile = body.S ? profileFrom(body.S) : null;
         state.finds = (body.f || []).map((row) => findFromRow(row, body.at));
         attachFinds();
         render();
@@ -2029,29 +5026,23 @@
         tg.expand();
         tg.MainButton.onClick(() => save());
         $('refresh').addEventListener('click', () => save({ refresh: true }));
-        tg.BackButton.onClick(() => {
-          if (state.watchItem !== null) state.watchItem = null;
-          else if (state.item !== null && !state.findBack) state.item = null;
-          else {
-            // Из карточки модели — к списку; со страницы находки (открыта из блока) — тоже сразу к списку.
-            state.item = null;
-            state.view = null;
-          }
-          state.findBack = false;
-          render();
-          window.scrollTo(0, 0);
-        });
+        // Стек экранов: страница находки, открытая из блока, лежит прямо на списке — «Назад» сразу к нему
+        tg.BackButton.onClick(goBack);
         const applyTheme = () => document.body.classList.toggle('dark', tg.colorScheme === 'dark');
         applyTheme();
         tg.onEvent('themeChanged', applyTheme);
         if (fromLink) {
           state.offline = true;
-          // Кнопка закреплённого сообщения (inline): правки через sendData не дойдут — только просмотр
-          state.readOnly = openedInline();
+          // Кнопка закреплённого сообщения (inline): правки через sendData не дойдут — только просмотр. Кнопка табло
+          // «📊 Обходы и графики» (k: 's') — сразу «📊 Обходы», целей в ней нет.
+          state.statsOnly = Boolean(fromLink.stats);
+          state.readOnly = openedInline() || state.statsOnly;
+          if (state.statsOnly) state.tab = 'stats';
           state.at = fromLink.at;
           state.targets = fromLink.targets;
           state.watched = fromLink.watched;
           state.dashboard = fromLink.dashboard || null;
+          state.profile = fromLink.profile || null;
           state.finds = fromLink.finds || [];
           attachFinds();
           render();
