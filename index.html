@@ -67,6 +67,17 @@
       input:focus {
         border-color: var(--accent);
       }
+      /* Цена без стрелок-спиннеров: они съедали место, и 20000 выглядело как «2000(». */
+      input[type='number'] {
+        -moz-appearance: textfield;
+        appearance: textfield;
+        font-variant-numeric: tabular-nums;
+      }
+      input[type='number']::-webkit-outer-spin-button,
+      input[type='number']::-webkit-inner-spin-button {
+        -webkit-appearance: none;
+        margin: 0;
+      }
       button {
         font: inherit;
         border: 0;
@@ -172,8 +183,10 @@
         gap: 4px;
         flex: none;
       }
+      /* 7 знаков: цена до 999 999 ₽ целиком и место под курсор (на телефоне 375 px строка помещается). */
       .price input {
-        width: 76px;
+        width: calc(7ch + 16px);
+        padding: 9px 7px;
         text-align: right;
         background: var(--bg);
       }
@@ -270,6 +283,10 @@
       .offer .cost {
         flex: none;
         font-weight: 600;
+      }
+      button.brief {
+        width: 100%;
+        margin: 8px 0 4px;
       }
       .actions {
         display: flex;
@@ -479,6 +496,25 @@
         padding: 8px 12px;
         margin: 8px 0;
       }
+      .stale-banner {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        background: rgba(245, 179, 1, 0.18);
+        border-radius: 10px;
+        padding: 8px 8px 8px 12px;
+        margin: 4px 0 8px;
+        font-size: 14px;
+      }
+      .stale-banner span {
+        flex: 1;
+        min-width: 0;
+      }
+      .stale-banner button {
+        flex: none;
+        padding: 7px 10px;
+        font-size: 14px;
+      }
       [hidden] {
         display: none !important;
       }
@@ -488,6 +524,10 @@
     <div id="error" class="error" hidden></div>
 
     <header id="top">
+      <div id="stale" class="stale-banner" hidden>
+        <span id="staleText"></span>
+        <button type="button" id="refresh">🔄 Обновить</button>
+      </div>
       <h1>Цели <span class="muted" id="count"></span></h1>
       <div class="tabs">
         <button type="button" class="tab active" id="tabTargets">📋 Модели</button>
@@ -517,7 +557,7 @@
       </div>
       <form class="add" id="add">
         <input name="name" placeholder="Новая модель" autocomplete="off" required />
-        <input name="price" type="number" inputmode="decimal" min="1" step="any" placeholder="₽" required />
+        <input name="price" type="number" inputmode="numeric" min="1" step="any" placeholder="₽" required />
         <button type="submit">+</button>
       </form>
       <div id="list"></div>
@@ -548,6 +588,9 @@
         watchRemove: new Set(),
       };
       const $ = (id) => document.getElementById(id);
+      // Данные из ссылки старше этого — плашка «могли измениться» с кнопкой «🔄 Обновить»: цели правят несколько
+      // администраторов, а ссылка кнопки обновляется только с новым сообщением бота.
+      const STALE_MINUTES = 30;
       const rub = (value) => Number(value).toLocaleString('ru-RU', { maximumFractionDigits: 2 }) + ' ₽';
       const safeUrl = (value) => (typeof value === 'string' && /^https:\/\//.test(value) ? value : null);
 
@@ -800,7 +843,7 @@
         const box = el('label', 'price');
         const input = el('input');
         input.type = 'number';
-        input.inputMode = 'decimal';
+        input.inputMode = 'numeric';
         input.min = '1';
         input.step = 'any';
         input.value = String(current(target).priceRub);
@@ -826,6 +869,25 @@
         if (target.finds > 0) parts.push('находок ' + target.finds);
         if (target.id < 0) parts.push('новая');
         return parts.join(' · ');
+      }
+
+      /** Время данных: сегодня — «21:11», раньше — «04.10, 21:11». */
+      function dataTime(at) {
+        const date = new Date(at * 1000);
+        const time = date.toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' });
+        if (date.toDateString() === new Date().toDateString()) return time;
+        return date.toLocaleDateString('ru-RU', { day: '2-digit', month: '2-digit' }) + ', ' + time;
+      }
+
+      /** Плашка сверху: данные из ссылки старше 30 минут (с сервера — всегда свежие, без плашки). */
+      function renderStale() {
+        const stale = state.offline && state.at && Date.now() - state.at * 1000 > STALE_MINUTES * 60_000;
+        $('stale').hidden = !stale;
+        if (!stale) return;
+        $('staleText').textContent =
+          'Данные на ' + dataTime(state.at) + ' — могли измениться (другой администратор мог поправить цены).';
+        // Несохранённые правки уходят вместе с обновлением — как при «Сохранить».
+        $('refresh').textContent = pendingCount() ? '🔄 Сохранить и обновить' : '🔄 Обновить';
       }
 
       function renderList() {
@@ -1056,7 +1118,7 @@
         if (state.offline && target.id > 0) {
           const chat = el('button', '', '📈 История цен и все объявления — в чат');
           chat.type = 'button';
-          chat.addEventListener('click', () => save(target.id));
+          chat.addEventListener('click', () => save({ openId: target.id }));
           actions.append(chat);
         }
         const remove = el('button', 'danger', deleted ? '↩ Не удалять' : '🗑 Удалить цель');
@@ -1157,7 +1219,7 @@
         if (state.offline && listing.id) {
           const chat = el('button', 'ghost', '📈 Вся история и проверки ПК — в чат');
           chat.type = 'button';
-          chat.addEventListener('click', () => save(undefined, listing.id));
+          chat.addEventListener('click', () => save({ historyId: listing.id }));
           actions.append(chat);
         }
         view.append(actions);
@@ -1174,9 +1236,19 @@
         return ['✓ выдача', 'пусто', '⏸ блок', '✗ ошибка', '… идёт'][code] || '?';
       }
 
+      /** «🧠 Сводка рынка от ИИ»: в режиме ссылки — кнопка (sendData с правками, бот пришлёт сводку), иначе — /brief. */
+      function briefAction() {
+        if (!state.offline) return el('div', 'muted', '🧠 Сводка рынка от ИИ — команда /brief в чате с ботом.');
+        const button = el('button', 'brief', '🧠 Сводка рынка от ИИ — в чат');
+        button.type = 'button';
+        button.addEventListener('click', () => save({ brief: true }));
+        return button;
+      }
+
       function renderStats() {
         const view = $('statsView');
         view.textContent = '';
+        view.append(briefAction());
         const d = state.dashboard;
         if (!d) {
           view.append(el('div', 'empty muted', 'Сводки пока нет — она появится со следующей кнопкой «📋 Цели».'));
@@ -1257,6 +1329,7 @@
 
       function render() {
         showError('');
+        renderStale();
         const target = state.view === null ? null : findTarget(state.view);
         const watchItem =
           !target && state.tab === 'watch' && state.watchItem !== null
@@ -1390,8 +1463,11 @@
         tg.MainButton.show();
       }
 
-      /** Сохранить. openId — бот пришлёт в чат карточку цели, historyId — историю объявления. */
-      async function save(openId, historyId) {
+      /**
+       * Сохранить. openId — бот пришлёт в чат карточку цели, historyId — историю объявления, brief — сводку рынка,
+       * refresh — свежую кнопку «📋 Цели» (данные в ссылке устарели; правки, если есть, сохраняются как обычно).
+       */
+      async function save({ openId, historyId, brief, refresh } = {}) {
         const invalid = [...state.dirty.values()].find(
           (change) => change.priceRub !== undefined && !(change.priceRub > 0),
         );
@@ -1414,6 +1490,8 @@
           if (state.watchRemove.size > 0) data.u = [...state.watchRemove];
           if (typeof openId === 'number') data.o = openId;
           if (typeof historyId === 'number') data.h = historyId;
+          if (brief) data.i = 1;
+          if (refresh) data.r = 1;
           const payload = JSON.stringify(data);
           if (new TextEncoder().encode(payload).length > 4096)
             return showError('Слишком много правок за раз — сохраните частями');
@@ -1509,6 +1587,7 @@
         tg.ready();
         tg.expand();
         tg.MainButton.onClick(() => save());
+        $('refresh').addEventListener('click', () => save({ refresh: true }));
         tg.BackButton.onClick(() => {
           if (state.watchItem !== null) state.watchItem = null;
           else if (state.item !== null) state.item = null;
@@ -1526,6 +1605,8 @@
           state.watched = fromLink.watched;
           state.dashboard = fromLink.dashboard || null;
           render();
+          // Приложение могли оставить открытым: плашка появится, когда данным исполнится 30 минут.
+          setInterval(renderStale, 60_000);
         } else {
           load().catch((error) => showError('Не загрузилось: ' + error.message));
         }
