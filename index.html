@@ -20,11 +20,15 @@
         --good-text: #1f9a5e;
         --gone-bg: #18181b;
         --gone-text: #7c7c84;
+        --find: #ff3b30;
+        --find-bg: rgba(255, 59, 48, 0.1);
       }
       body.dark {
         --good-bg: rgba(90, 214, 154, 0.15);
         --good-text: #5ad69a;
         --gone-bg: #0b0b0d;
+        --find: #ff453a;
+        --find-bg: rgba(255, 69, 58, 0.16);
       }
       * {
         box-sizing: border-box;
@@ -515,6 +519,135 @@
         padding: 7px 10px;
         font-size: 14px;
       }
+      /*
+       * Находка подходит сейчас (решение владельца 05.10.2026, образец «как прямой эфир»): ровная красная точка, от неё
+       * расходится и гаснет тень (1,6 с). Данные обновились и находки нет — нет и точки. Без анимации — просто точка.
+       * --ring — подложка под точкой на фото (цвет фона), её тень сохраняется в каждом кадре.
+       */
+      .pulse {
+        --ring: 0 0 0 0 transparent;
+        display: inline-block;
+        flex: none;
+        width: 10px;
+        height: 10px;
+        border-radius: 50%;
+        background: var(--find);
+        vertical-align: middle;
+        box-shadow:
+          var(--ring),
+          0 0 0 0 rgba(226, 75, 74, 0.7);
+        animation: pulse 1.6s infinite;
+      }
+      @keyframes pulse {
+        0% {
+          box-shadow:
+            var(--ring),
+            0 0 0 0 rgba(226, 75, 74, 0.7);
+        }
+        70% {
+          box-shadow:
+            var(--ring),
+            0 0 0 10px rgba(226, 75, 74, 0);
+        }
+        100% {
+          box-shadow:
+            var(--ring),
+            0 0 0 0 rgba(226, 75, 74, 0);
+        }
+      }
+      @media (prefers-reduced-motion: reduce) {
+        .pulse {
+          animation: none;
+        }
+      }
+      .finds {
+        margin: 6px 0 12px;
+        padding: 10px 10px 4px;
+        border-radius: 12px;
+        background: var(--find-bg);
+      }
+      .finds-head {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        margin: 0 4px 10px;
+        font-weight: 600;
+      }
+      .frow {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        padding: 8px;
+        margin-bottom: 6px;
+        border-radius: 10px;
+        background: var(--bg);
+        cursor: pointer;
+      }
+      .frow .title {
+        display: -webkit-box;
+        -webkit-line-clamp: 2;
+        -webkit-box-orient: vertical;
+        overflow: hidden;
+        overflow-wrap: anywhere;
+      }
+      .frow .cost,
+      .offer.live .cost {
+        color: var(--find);
+        text-align: right;
+      }
+      .frow .cost .sub {
+        font-weight: 400;
+      }
+      .thumb-wrap {
+        position: relative;
+        flex: none;
+      }
+      .thumb-wrap > .pulse {
+        --ring: 0 0 0 2px var(--bg);
+        position: absolute;
+        top: -3px;
+        right: -3px;
+        width: 12px;
+        height: 12px;
+      }
+      .live-badge {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        margin-left: 6px;
+        padding: 1px 8px 1px 7px;
+        border-radius: 10px;
+        background: var(--find-bg);
+        color: var(--find);
+        font-size: 13px;
+        font-weight: 600;
+        white-space: nowrap;
+      }
+      .live-badge .pulse {
+        width: 8px;
+        height: 8px;
+      }
+      .offer.live {
+        border-left-color: var(--find);
+        background: var(--find-bg);
+      }
+      .offer.live .when,
+      .live-note {
+        color: var(--find);
+      }
+      .live-note {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        margin: 6px 0;
+        font-weight: 600;
+      }
+      #tabLive .pulse {
+        width: 8px;
+        height: 8px;
+        margin-left: 4px;
+        vertical-align: 1px;
+      }
       [hidden] {
         display: none !important;
       }
@@ -530,7 +663,7 @@
       </div>
       <h1>Цели <span class="muted" id="count"></span></h1>
       <div class="tabs">
-        <button type="button" class="tab active" id="tabTargets">📋 Модели</button>
+        <button type="button" class="tab active" id="tabTargets">📋 Модели <span id="tabLive"></span></button>
         <button type="button" class="tab" id="tabWatch">⭐ Слежу <span id="watchCount"></span></button>
         <button type="button" class="tab" id="tabStats">📊 Обходы</button>
       </div>
@@ -547,6 +680,7 @@
     <section id="statsView" hidden></section>
 
     <section id="listView">
+      <div id="finds" class="finds" hidden></div>
       <div class="muted" id="hint">
         Цена — до скольких ₽ покупать. Переключатель — слежу / пауза. Нажмите на модель — карточка.
       </div>
@@ -586,6 +720,10 @@
         watched: [],
         watchAdd: new Map(),
         watchRemove: new Set(),
+        // «🔴 Подходят сейчас»: пары «объявление — цель» из данных; точки рисуются только по ним.
+        finds: [],
+        // Страницу объявления открыли из блока находок: «Назад» — сразу к списку.
+        findBack: false,
       };
       const $ = (id) => document.getElementById(id);
       // Данные из ссылки старше этого — плашка «могли измениться» с кнопкой «🔄 Обновить»: цели правят несколько
@@ -757,6 +895,54 @@
         };
       }
 
+      /**
+       * Находка, которая подходит сейчас: [id объявления, id цели, ₽, минут с первого уведомления до at, заголовок,
+       * ссылка (у Avito — путь от «/»), фото | 0, кукол]. found — минута Unix первого уведомления.
+       */
+      function findFromRow(row, at) {
+        const [listingId, targetId, priceRub, minutesAgo, title, url, img, quantity] = row;
+        const link = typeof url === 'string' && url.startsWith('/') ? 'https://www.avito.ru' + url : url;
+        const count = Math.max(1, Number(quantity) || 1);
+        return {
+          listingId: Number(listingId),
+          targetId: Number(targetId),
+          priceRub: Number(priceRub),
+          unitRub: Math.round((Number(priceRub) * 100) / count) / 100,
+          quantity: count,
+          found: Math.floor((at || Date.now() / 1000) / 60) - (Number(minutesAgo) || 0),
+          title: String(title || ''),
+          url: safeUrl(link),
+          img: safeUrl(img || null),
+        };
+      }
+
+      /**
+       * Объявление находки — среди объявлений её модели (в ссылку могло не влезть): из блока «Подходят сейчас» и из
+       * карточки модели открывается его страница.
+       */
+      function attachFinds() {
+        for (const find of state.finds) {
+          const target = state.targets.find((t) => t.id === find.targetId);
+          if (!target || !find.url) continue;
+          const listing = target.listings.find((item) => item.id === find.listingId);
+          if (listing) {
+            if (!listing.img) listing.img = find.img;
+            continue;
+          }
+          target.listings.unshift({
+            id: find.listingId,
+            url: find.url,
+            title: find.title,
+            priceRub: find.priceRub,
+            img: find.img,
+            firstSeen: null,
+            lastSeen: null,
+            removed: false,
+            trail: [],
+          });
+        }
+      }
+
       function normalizeWatch(item) {
         return {
           id: item.id,
@@ -799,6 +985,8 @@
             ),
             watched: (data.w || []).map(watchFromRow),
             dashboard: dashboardFrom(data.d),
+            // f — с 05.10.2026; в ссылках старее его нет.
+            finds: (data.f || []).map((row) => findFromRow(row, data.at)),
           };
         }
         const plain = /[#&]t=([A-Za-z0-9_-]+)/.exec(location.hash);
@@ -807,6 +995,7 @@
         return {
           at: null,
           watched: [],
+          finds: [],
           targets: data.t.map(([id, name, priceRub, active]) =>
             normalize({ id, name, priceRub, active: active === 1 }),
           ),
@@ -871,6 +1060,88 @@
         return parts.join(' · ');
       }
 
+      /**
+       * Находки, которые подходят сейчас, с учётом несохранённых правок: цель на паузе, удалена или порог ниже цены
+       * (у лота — за штуку) — точки нет, как не будет её и в чате после сохранения.
+       */
+      function liveFinds() {
+        return state.finds.filter((find) => {
+          const target = findTarget(find.targetId);
+          if (!target || state.deleted.has(target.id)) return false;
+          const now = current(target);
+          return now.active && find.unitRub <= now.priceRub;
+        });
+      }
+
+      /** Подходящая сейчас находка с этим объявлением (у этой цели; без targetId — у любой) или null. */
+      function liveFind(listingId, targetId) {
+        for (const find of liveFinds()) {
+          if (find.listingId === listingId && (targetId === undefined || find.targetId === targetId)) return find;
+        }
+        return null;
+      }
+
+      /** Сколько прошло: «только что», «25 мин назад», «3 ч назад», «2 дн. назад». */
+      function ago(minute) {
+        const passed = Math.max(0, Math.floor(Date.now() / 60_000) - minute);
+        if (passed < 1) return 'только что';
+        if (passed < 60) return passed + ' мин назад';
+        if (passed < 48 * 60) return Math.floor(passed / 60) + ' ч назад';
+        return Math.floor(passed / 1440) + ' дн. назад';
+      }
+
+      function pulse() {
+        const dot = el('span', 'pulse');
+        dot.setAttribute('aria-hidden', 'true');
+        return dot;
+      }
+
+      /** Миниатюра с пульсирующей точкой в углу: объявление подходит сейчас. */
+      function liveThumb(item) {
+        const wrap = el('div', 'thumb-wrap');
+        wrap.append(thumb(item, 'thumb'), pulse());
+        return wrap;
+      }
+
+      /** «● N» у названия модели: сколько её объявлений подходят сейчас. */
+      function liveBadge(count) {
+        const badge = el('span', 'live-badge');
+        badge.title = 'Подходят сейчас: ' + count;
+        badge.append(pulse(), String(count));
+        return badge;
+      }
+
+      /** Блок «🔴 Подходят сейчас (N)» сверху «📋 Модели»: объявление — одна строка (под две цели — обе модели). */
+      function renderFinds() {
+        const box = $('finds');
+        box.textContent = '';
+        const groups = new Map();
+        for (const find of liveFinds()) {
+          const name = findTarget(find.targetId).name;
+          const group = groups.get(find.listingId);
+          if (group) group.models.push(name);
+          else groups.set(find.listingId, { find, models: [name] });
+        }
+        box.hidden = groups.size === 0;
+        $('tabLive').textContent = '';
+        if (groups.size === 0) return;
+        $('tabLive').append(pulse());
+        const head = el('div', 'finds-head');
+        head.append(pulse(), el('span', '', 'Подходят сейчас (' + groups.size + ')'));
+        box.append(head);
+        for (const { find, models } of groups.values()) {
+          const row = el('div', 'frow');
+          const info = el('div', 'info');
+          info.append(el('div', 'title', find.title));
+          info.append(el('div', 'sub', models.join(', ') + ' · ' + ago(find.found)));
+          const cost = el('div', 'cost', rub(find.priceRub));
+          if (find.quantity > 1) cost.append(el('div', 'sub', find.quantity + ' шт. по ' + rub(find.unitRub)));
+          row.append(liveThumb({ name: find.title || '?', img: find.img }), info, cost);
+          row.addEventListener('click', () => openFind(find));
+          box.append(row);
+        }
+      }
+
       /** Время данных: сегодня — «21:11», раньше — «04.10, 21:11». */
       function dataTime(at) {
         const date = new Date(at * 1000);
@@ -910,6 +1181,9 @@
         if (shown.length === 0) {
           list.append(el('div', 'empty muted', all.length ? 'Ничего не нашлось' : 'Целей пока нет — добавьте первую'));
         }
+        // Сколько объявлений модели подходят сейчас — «● N» у названия.
+        const live = new Map();
+        for (const find of liveFinds()) live.set(find.targetId, (live.get(find.targetId) || 0) + 1);
         for (const target of shown) {
           const deleted = state.deleted.has(target.id);
           const now = current(target);
@@ -919,7 +1193,9 @@
           if (deleted) row.classList.add('deleted');
           const open = el('div', 'open');
           const info = el('div', 'info');
-          info.append(el('div', 'name', target.name));
+          const name = el('div', 'name', target.name);
+          if (live.get(target.id)) name.append(liveBadge(live.get(target.id)));
+          info.append(name);
           const sub = subline(target);
           if (sub) info.append(el('div', 'sub', sub));
           open.append(thumb(target, 'thumb'), info);
@@ -1010,7 +1286,9 @@
             event.stopPropagation();
             toggleWatch(item);
           });
-          row.append(thumb({ name: item.title, img: item.img }, 'thumb'), info, cost, remove);
+          const image = { name: item.title, img: item.img };
+          const live = !item.removed && liveFind(item.id);
+          row.append(live ? liveThumb(image) : thumb(image, 'thumb'), info, cost, remove);
           row.addEventListener('click', () => (item.adding ? openLink(item.url) : showWatchItem(item.id)));
           list.append(row);
         }
@@ -1065,6 +1343,8 @@
           );
         }
         line('Находок прислано', String(target.finds));
+        const liveHere = liveFinds().filter((find) => find.targetId === target.id).length;
+        if (liveHere > 0) line('Подходят сейчас', String(liveHere));
         view.append(stats);
 
         const listingsPanel = el('div', 'panel');
@@ -1078,19 +1358,28 @@
               (target.activeCount || shownActive) +
               ', снято ' +
               (target.removedCount || shownRemoved) +
-              '. Зелёные — по вашей цене, серые — дороже, тёмные — сняты. Нажмите — история объявления.',
+              '. Красные с точкой — подходят сейчас, зелёные — по вашей цене, серые — дороже, тёмные — сняты. ' +
+              'Нажмите — история объявления.',
           ),
         );
-        for (const listing of target.listings) {
+        // Подходящие сейчас — сверху (сортировка устойчивая: остальные — как были).
+        const findOf = (listing) => (listing.removed ? null : liveFind(listing.id, target.id));
+        const listings = [...target.listings].sort((a, b) => (findOf(b) ? 1 : 0) - (findOf(a) ? 1 : 0));
+        for (const listing of listings) {
+          const find = findOf(listing);
           const item = el('div', 'offer');
           if (listing.removed) item.classList.add('removed');
+          else if (find) item.classList.add('live');
           else if (listing.priceRub !== null && listing.priceRub <= current(target).priceRub) item.classList.add('ok');
-          item.append(thumb({ name: listing.title || '?', img: listing.img }, 'thumb'));
+          const image = { name: listing.title || '?', img: listing.img };
+          item.append(find ? liveThumb(image) : thumb(image, 'thumb'));
           const info = el('div', 'info');
           info.append(el('div', 'title', listing.title));
           const when = listing.removed
             ? 'снято · видели ' + minuteDate(listing.lastSeen)
-            : 'с ' + minuteDate(listing.firstSeen) + (listing.trail.length > 1 ? ' · цена менялась' : '');
+            : find
+              ? 'подходит сейчас · в чате ' + ago(find.found)
+              : 'с ' + minuteDate(listing.firstSeen) + (listing.trail.length > 1 ? ' · цена менялась' : '');
           info.append(el('div', 'when', when));
           item.append(info, el('div', 'cost', listing.priceRub === null ? '—' : rub(listing.priceRub)));
           if (listing.id && !listing.removed) {
@@ -1130,12 +1419,14 @@
 
       /** Экран объявления: фото крупно, цена (зелёная — по вашей цене), история цены, ссылка, ⭐, история в чат. */
       function renderItem(target, listing) {
-        renderItemView(listing, { name: target.name, threshold: current(target).priceRub });
+        renderItemView(listing, { name: target.name, threshold: current(target).priceRub, targetId: target.id });
       }
 
       const CHECK_TEXT = ['✓', 'снято с продажи', '✗ заглушка Avito', '✗ страница не разобрана', '✗ не открылась'];
 
-      /** Страница объявления; ctx — цель (название и порог) или null, если подходящей цели нет. */
+      /**
+       * Страница объявления; ctx — цель (название, порог и id — у объявлений модели) или null, если подходящей цели нет.
+       */
       function renderItemView(listing, ctx) {
         const view = $('detailView');
         view.textContent = '';
@@ -1148,6 +1439,13 @@
         if (listing.removed) price.classList.add('gone');
         else if (ok) price.classList.add('ok');
         view.append(price);
+        const find = listing.removed ? null : liveFind(listing.id, (ctx && ctx.targetId) || undefined);
+        if (find) {
+          const note = el('div', 'live-note');
+          const lot = find.quantity > 1 ? ' (' + find.quantity + ' шт. по ' + rub(find.unitRub) + ')' : '';
+          note.append(pulse(), el('span', '', 'Подходит сейчас' + lot + ' — в чате ' + ago(find.found)));
+          view.append(note);
+        }
         if (listing.removed) {
           view.append(
             el('div', 'gone-banner', 'Снято с продажи. Последний раз видели ' + minuteDate(listing.lastSeen) + '.'),
@@ -1322,6 +1620,18 @@
       function showItem(listingId) {
         if (!listingId) return;
         state.item = listingId;
+        state.findBack = false;
+        haptic('select');
+        render();
+        window.scrollTo(0, 0);
+      }
+
+      /** Находка из блока «Подходят сейчас»: страница объявления в модели; «Назад» — сразу к списку. */
+      function openFind(find) {
+        if (!findTarget(find.targetId)) return openLink(find.url);
+        state.view = find.targetId;
+        state.item = find.listingId;
+        state.findBack = true;
         haptic('select');
         render();
         window.scrollTo(0, 0);
@@ -1361,6 +1671,7 @@
         } else {
           state.view = null;
           renderList();
+          renderFinds();
           if (state.tab === 'watch') renderWatch();
           if (state.tab === 'stats') renderStats();
           tg.BackButton.hide();
@@ -1375,6 +1686,7 @@
       function showDetail(id) {
         state.view = id;
         state.item = null;
+        state.findBack = false;
         haptic('select');
         render();
         window.scrollTo(0, 0);
@@ -1534,6 +1846,8 @@
         state.targets = body.targets.map(normalize);
         state.watched = (body.w || []).map(watchFromRow);
         state.dashboard = dashboardFrom(body.d);
+        state.finds = (body.f || []).map((row) => findFromRow(row, body.at));
+        attachFinds();
         render();
       }
 
@@ -1590,8 +1904,13 @@
         $('refresh').addEventListener('click', () => save({ refresh: true }));
         tg.BackButton.onClick(() => {
           if (state.watchItem !== null) state.watchItem = null;
-          else if (state.item !== null) state.item = null;
-          else state.view = null;
+          else if (state.item !== null && !state.findBack) state.item = null;
+          else {
+            // Из карточки модели — к списку; со страницы находки (открыта из блока) — тоже сразу к списку.
+            state.item = null;
+            state.view = null;
+          }
+          state.findBack = false;
           render();
           window.scrollTo(0, 0);
         });
@@ -1604,12 +1923,18 @@
           state.targets = fromLink.targets;
           state.watched = fromLink.watched;
           state.dashboard = fromLink.dashboard || null;
+          state.finds = fromLink.finds || [];
+          attachFinds();
           render();
-          // Приложение могли оставить открытым: плашка появится, когда данным исполнится 30 минут.
-          setInterval(renderStale, 60_000);
         } else {
           load().catch((error) => showError('Не загрузилось: ' + error.message));
         }
+        // Приложение могли оставить открытым: плашка появится, когда данным исполнится 30 минут; «N мин назад» у
+        // находок идёт дальше.
+        setInterval(() => {
+          renderStale();
+          if (!$('listView').hidden) renderFinds();
+        }, 60_000);
       }
 
       start();
