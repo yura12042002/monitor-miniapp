@@ -1947,8 +1947,11 @@
           return best;
         }
 
-        /** Цель профиля: [id, название, порог ₽, включена, фото | 0, поиск по модели, кукол в продаже за 7 дней]. */
-        function targetFromRow([id, name, priceRub, active, img, modelSearch, selling]) {
+        /**
+         * Цель профиля: [id, название, порог ₽, включена, фото | 0, поиск по модели, кукол в продаже за 7 дней,
+         * варианты «Поиска» (с 06.10.2026, только у цели с поиском по модели)].
+         */
+        function targetFromRow([id, name, priceRub, active, img, modelSearch, selling, queries]) {
           return {
             id,
             name: String(name),
@@ -1957,10 +1960,14 @@
             img: safeUrl(img || null),
             modelSearch: modelSearch === 1,
             selling: Number(selling) || 0,
+            ...(Array.isArray(queries) ? { queries: queries.map(String) } : {}),
           };
         }
 
-        /** Группа за сутки (g, 13 чисел): общие, модели или проверки страниц — интервал, замедление, очередь. */
+        /**
+         * Группа за сутки (g, 13 чисел): общие, модели или проверки страниц — интервал, замедление, очередь; у моделей
+         * с 06.10.2026 ещё 14-е — вариантов «Поиска» (адресов), а адресов — слотов моделей.
+         */
         function groupFromRow(row) {
           return {
             group: row[0],
@@ -1976,6 +1983,7 @@
             slowUntil: row[10],
             waitMedian: row[11],
             waitP90: row[12],
+            ...(row.length > 13 ? { variants: Number(row[13]) || 0 } : {}),
           };
         }
 
@@ -2003,7 +2011,8 @@
 
         /**
          * Обход (r, 26 полей и необязательные); списки 22–25 — 0, если подробности не поместились в ссылку; 26 — итог
-         * проверки страницы; 27–31 (с 06.10.2026) — браузер, картинки, передача, сеть и тип IP выхода.
+         * проверки страницы; 27–31 (с 06.10.2026) — браузер (-1 — нет), картинки, передача, сеть и тип IP выхода;
+         * 32 — вариант «Поиска» обхода модели, если искал не названием цели.
          */
         function runFromRow(row, browsers = []) {
           return {
@@ -2045,6 +2054,7 @@
                   ipType: Number(row[31]) || 0,
                 }
               : {}),
+            ...(row.length > 32 && row[32] ? { variant: String(row[32]) } : {}),
           };
         }
 
@@ -2118,9 +2128,9 @@
        * приходят в данных (DealRow), страница решает только цвет и подписи. Зелёное «горячее» — только по флагу сервера
        * (шанс от 70 без красных флагов, видели за сутки, и находка включённой модели без оценки «мимо» — gateHot); шанс
        * от 70 без этого флага — обычное; обычное — 40–69; жёлтое «проверьте» — ниже 40 или красный флаг
-       * (бронь, «на доставку», цена-приманка, часть куклы, символическая цена, лот, предзаказ, привоз, репродукция),
-       * жёлтое не скрывается. Ссылки без «шанса» (до 05.10.2026) — по цене к порогу. Без DOM: Jest выполняет блок через
-       * vm (test/miniapp/deal-view.test.ts) и сверяет причины и флаги с сервером.
+       * (бронь, «на доставку», цена-приманка, часть куклы, символическая цена, условие цели не подтверждено, лот,
+       * предзаказ, привоз, репродукция), жёлтое не скрывается. Ссылки без «шанса» (до 05.10.2026) — по цене к порогу.
+       * Без DOM: Jest выполняет блок через vm (test/miniapp/deal-view.test.ts) и сверяет причины и флаги с сервером.
        */
       var DealView = (() => {
         /** Признаки объявления (FLAG в listings/listing-signals.ts). */
@@ -2142,9 +2152,10 @@
           find: 16384,
           fresh: 32768,
           stats: 65536,
+          unconfirmed: 131072,
         };
         /** Красные флаги: жёсткие (не выше 39) и мягкие (не выше 69) — HARD_FLAGS и SOFT_FLAGS сервера. */
-        const HARD = FLAG.reserved | FLAG.technical | FLAG.bait | FLAG.part | FLAG.cheap;
+        const HARD = FLAG.reserved | FLAG.technical | FLAG.bait | FLAG.part | FLAG.cheap | FLAG.unconfirmed;
         const SOFT = FLAG.lot | FLAG.preorder | FLAG.imported | FLAG.repro;
         /** Уровни «шанса» (SCORE_LEVELS). */
         const LEVELS = { hot: 70, neutral: 40 };
@@ -2177,6 +2188,7 @@
           'предзаказ',
           'привоз из-за рубежа',
           'репродукция',
+          'условие цели не подтверждено',
         ];
         const RED_FROM = 16;
         const RANK = { hot: 0, neutral: 1, warn: 2 };
@@ -2431,6 +2443,10 @@
           removedCount: Number(target.removedCount) || 0,
           // Рынок кукол (аудит 05.10.2026, К4): скрыто дешевле границы и «не кукла модели», лотов; у сервера — hidden
           market: target.market || marketFrom(target),
+          // Точные условия цели словами (поколение, серия, коробка, комплект, цена за набор); нет — пусто
+          rules: target.rules ? String(target.rules) : '',
+          // Варианты «Поиска» (с 06.10.2026); нет — ищется по названию
+          search: Array.isArray(target.search) ? target.search.map(String) : [],
           listings: (target.listings || target.offers || [])
             .map(normalizeListing)
             .filter((listing) => listing.url)
@@ -2613,6 +2629,29 @@
         };
       }
 
+      /**
+       * Цель из ссылки «Цели» (payload.ts, Row): [id, название, ₽, 0|1, находок, фото | 0, сводка цен | 0, объявления,
+       * продаются, снято, рынок кукол | 0, условия | 0, варианты «Поиска»] — последние три только у новых ссылок.
+       */
+      function targetFromLink(row) {
+        const [id, name, priceRub, active, finds, img, stats, listings, activeCount, removedCount, market] = row;
+        return normalize({
+          id,
+          name,
+          priceRub,
+          active: active === 1,
+          finds,
+          img: img || null,
+          stats: stats ? { count: stats[0], min: stats[1], median: stats[2], max: stats[3] } : null,
+          listings: listings || [],
+          activeCount,
+          removedCount,
+          market: Array.isArray(market) ? { cheap: market[0], other: market[1], lots: market[2] } : null,
+          rules: row[11],
+          search: row[12],
+        });
+      }
+
       /** Данные из ссылки кнопки: v2 (#z=, deflate-raw) или v1 (#t=, только цели). */
       async function fromHash() {
         const packed = /[#&]z=([A-Za-z0-9_-]+)/.exec(location.hash);
@@ -2626,22 +2665,7 @@
           return {
             at: data.at || null,
             minRub: isNum(data.mp) ? data.mp : null,
-            targets: data.t.map(
-              ([id, name, priceRub, active, finds, img, stats, listings, activeCount, removedCount, market]) =>
-                normalize({
-                  id,
-                  name,
-                  priceRub,
-                  active: active === 1,
-                  finds,
-                  img: img || null,
-                  stats: stats ? { count: stats[0], min: stats[1], median: stats[2], max: stats[3] } : null,
-                  listings: listings || [],
-                  activeCount,
-                  removedCount,
-                  market: Array.isArray(market) ? { cheap: market[0], other: market[1], lots: market[2] } : null,
-                }),
-            ),
+            targets: data.t.map(targetFromLink),
             watched: (data.w || []).map(watchFromRow),
             dashboard: dashboardFrom(data.d),
             // f — с 05.10.2026; в ссылках старее его нет.
@@ -3208,6 +3232,8 @@
           item.append(el('span', 'muted', name), el('b', '', value));
           stats.append(item);
         };
+        if (target.search.length > 0) line('Поиск', target.search.join('; '));
+        if (target.rules) line('Условия', target.rules);
         if (target.stats) {
           // Рынок кукол модели (аудит 05.10.2026, К4): отдельные куклы без дублей, лотов и мусора; медиана — от 3
           line('Кукол за 30 дней', fmt(target.stats.count));
@@ -4076,7 +4102,8 @@
       function runWhat(p, run) {
         if (run.kind === 0) return String(run.about || 'запрос');
         if (run.kind === 1) {
-          const name = targetName(run.about);
+          // Вариант «Поиска», которым искал обход (с 06.10.2026), — после названия модели
+          const name = run.variant ? targetName(run.about) + ' · ' + run.variant : targetName(run.about);
           return run.thresholdRub ? name + ' · до ' + rub(run.thresholdRub) : name;
         }
         if (run.kind === 3) return has(run.flags, 4) ? 'без записи' : '';
@@ -4163,13 +4190,14 @@
         return run.outcome === 0 && (run.kind === 0 || run.kind === 1) && run.found > 0 && run.known === null;
       }
 
-      /** Мелкая строка: браузер, выход, передача, длительность, ожидание в очереди, страница, первый обход. */
+      /** Мелкая строка: браузер, выход и его IP, передача, длительность, ожидание в очереди, страница, первый обход. */
       function runMeta(p, run) {
         const parts = [];
-        // Браузер обхода (с 06.10.2026: браузер и IP меняются на каждой загрузке)
+        // Браузер и выход обхода (с 06.10.2026 браузер и IP меняются на каждой загрузке): «Opera · happ ·
+        // 89.253.49.183»; выход без IP (старые ссылки, напрямую) — только подпись
         if (run.browser) parts.push(run.browser + (run.media ? ' с картинками' : ''));
         const exit = p.exits[run.exit];
-        if (exit) parts.push(exit.label);
+        if (exit) parts.push(exit.ip ? exit.label + ' · ' + exit.ip : exit.label);
         if (run.handOverOf) parts.push('передача');
         if (run.handedOver) parts.push('передан дальше');
         if (isNum(run.seconds)) parts.push(duration(run.seconds));
@@ -4217,6 +4245,10 @@
         const parts = [GROUP_TITLE[group.group] || 'Другое'];
         if (group.group === 0 && group.urls > 0) parts.push(countText(group.urls, 'запрос', 'запроса', 'запросов'));
         if (group.group === 1 && group.urls > 0) parts.push(countText(group.urls, 'модель', 'модели', 'моделей'));
+        // Вариантов «Поиска» больше, чем моделей (с 06.10.2026) — сколько запросов идёт по очереди
+        if (group.group === 1 && group.variants > group.urls) {
+          parts.push(countText(group.variants, 'запрос', 'запроса', 'запросов'));
+        }
         if (group.group !== 2) {
           const every = group.every >= 0 ? 'раз в ~' + group.every + ' мин' : 'за 3 ч не было';
           parts.push(group.target > 0 ? every + ' (цель ' + group.target + ')' : every);
@@ -4576,11 +4608,26 @@
           head.append(thumb({ name: target.name, img: target.img }, 'thumb big'));
           info.append(el('h2', '', target.name));
           if (run.thresholdRub) info.append(el('div', 'muted', 'порог ' + rub(run.thresholdRub)));
+          const variants = variantsLine(target, run);
+          if (variants) info.append(variants);
         } else {
           info.append(el('h2', '', runTitle(p, run)));
         }
         head.append(info);
         return head;
+      }
+
+      /**
+       * Варианты «Поиска» модели (с 06.10.2026): «запрос Catrine DeMew · варианты: Катрин де Мяу; Catrine DeMew» —
+       * каким искал этот обход и какие идут по очереди; без вариантов в данных — только запрос обхода (если он не
+       * название модели), иначе ничего.
+       */
+      function variantsLine(target, run) {
+        const list = target.queries || [];
+        const parts = [];
+        if (run.variant) parts.push('запрос ' + run.variant);
+        if (list.length > 1) parts.push('варианты: ' + list.join('; '));
+        return parts.length > 0 ? el('div', 'muted', parts.join(' · ')) : null;
       }
 
       function runTitle(p, run) {
