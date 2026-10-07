@@ -3,6 +3,7 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <meta name="referrer" content="no-referrer" />
     <title>Модели</title>
     <script src="https://telegram.org/js/telegram-web-app.js"></script>
     <style>
@@ -177,6 +178,13 @@
       .stale-banner button {
         flex: none;
         padding: 6px 10px;
+      }
+      /* Время данных на экране (ссылка или снимок полного режима) и итог проверки снимка. */
+      .fresh {
+        margin: 0 0 4px;
+      }
+      .fresh .bad {
+        color: var(--yellow-text);
       }
       .tabs {
         display: flex;
@@ -395,6 +403,10 @@
       button.brief {
         width: 100%;
         margin: 12px 0 4px;
+      }
+      button.runs-more {
+        width: 100%;
+        margin: 8px 0 4px;
       }
       details.more summary {
         padding: 2px 2px 6px;
@@ -1393,6 +1405,7 @@
     </style>
   </head>
   <body>
+    <div id="fresh" class="fresh muted" hidden></div>
     <div id="error" class="error" hidden></div>
 
     <header id="top">
@@ -1416,7 +1429,6 @@
 
     <section id="listView">
       <div id="finds" class="finds" hidden></div>
-      <div class="muted" id="hint"></div>
       <input class="search" id="search" type="search" placeholder="Поиск" autocomplete="off" />
       <div class="bulk" id="bulk">
         <button type="button" class="ghost" id="allOn">Включить все</button>
@@ -2100,9 +2112,64 @@
           };
         }
 
+        /**
+         * Обходы файла суток (снимок полного режима, TZ.md шаг 6) — в профиль p: обходов, которых в p нет, — добавить;
+         * у обхода p без подробностей (ссылка) — взять их подробности. Выходы (x) и адреса (u) файла суток — на индексы
+         * p; объявления и цели, которых в p нет, — из файла суток. Что-то поменялось — true.
+         */
+        function mergeRuns(p, day) {
+          const exitAt = (index) => {
+            const exit = isNum(index) && index >= 0 ? day.exits[index] : null;
+            if (!exit) return -1;
+            const found = p.exits.findIndex((item) => item.label === exit.label && item.ip === exit.ip);
+            if (found !== -1) return found;
+            // Выход только у обходов файла суток — строка без чисел (в «Выходах за сутки» её нет)
+            p.exits.push({ ...exit, runs: 0, ok: 0, blocked: 0, failed: 0 });
+            return p.exits.length - 1;
+          };
+          const urlAt = (index) => {
+            const url = isNum(index) && index >= 0 ? day.urls[index] : null;
+            if (!url) return -1;
+            const found = p.urls.indexOf(url);
+            if (found !== -1) return found;
+            p.urls.push(url);
+            return p.urls.length - 1;
+          };
+          const attemptsOf = (list) => {
+            if (!Array.isArray(list)) return list;
+            return list.map((row) => [exitAt(row[0]), ...row.slice(1)]);
+          };
+          const byId = new Map(p.runs.map((run) => [run.id, run]));
+          let changed = false;
+          for (const run of day.runs) {
+            const own = byId.get(run.id);
+            if (!own) {
+              const attemptList = attemptsOf(run.attemptList);
+              p.runs.push({ ...run, exit: exitAt(run.exit), url: urlAt(run.url), attemptList });
+              changed = true;
+            } else if (own.freshIds === 0 && run.freshIds !== 0) {
+              own.freshIds = run.freshIds;
+              own.cheaperList = run.cheaperList;
+              own.attemptList = attemptsOf(run.attemptList);
+              own.findIds = run.findIds;
+              changed = true;
+            }
+          }
+          if (!changed) return false;
+          for (const [id, listing] of day.listings) {
+            if (!p.listings.has(id)) p.listings.set(id, listing);
+          }
+          for (const [id, target] of day.targets) {
+            if (!p.targets.has(id)) p.targets.set(id, target);
+          }
+          p.runs.sort((a, b) => b.minute - a.minute || b.id - a.id);
+          return true;
+        }
+
         return {
           dashboardFrom,
           profileFrom,
+          mergeRuns,
           exitFromRow,
           runFromRow,
           listingFromRow,
@@ -2243,6 +2310,116 @@
       })();
     </script>
 
+    <script id="snapshot-crypto">
+      /*
+       * Полный режим (TZ.md, шаг 6): зашифрованный снимок данных на GitHub Pages. Формат — как у сервера
+       * (apps/core/src/miniapp-data/crypto.ts): 'MS1' | kid (3 байта) | iv (12 байт) | AES-256-GCM | тег (16 байт),
+       * AAD — 'MS1|<kid>|<имя>'; внутри — длина (4 байта) и deflate-raw(JSON), дополненные нулями до кратного 1 КБ.
+       * Ключи — HKDF-SHA256 из ключа данных во фрагменте ссылки (&k=<kid>.<ключ>), имена файлов — HMAC. Без DOM: Jest
+       * выполняет блок через vm (test/miniapp-data/crypto.test.ts) — что зашифровал сервер, страница открывает.
+       */
+      var SnapshotCrypto = (() => {
+        const MAGIC = 'MS1';
+        const KID_BYTES = 3;
+        const IV_BYTES = 12;
+        const TAG_BYTES = 16;
+        const HEADER = MAGIC.length + KID_BYTES + IV_BYTES;
+        const SALT = 'monitor-data';
+        const text = new TextEncoder();
+
+        /** Файл подменён, испорчен или от другого ключа: страница пишет «данные не прошли проверку». */
+        class VerifyError extends Error {}
+
+        /** Ключ из фрагмента ссылки: '<kid>.<ключ base64url>' → { kid, raw }; не тот вид — null. */
+        function parseKey(value) {
+          const match = /^([0-9a-f]{6})\.([A-Za-z0-9_-]{43})$/.exec(String(value || ''));
+          if (!match) return null;
+          const b64 = match[2].replace(/-/g, '+').replace(/_/g, '/') + '=';
+          const raw = Uint8Array.from(atob(b64), (c) => c.charCodeAt(0));
+          return raw.length === 32 ? { kid: match[1], raw } : null;
+        }
+
+        /** 32 байта HKDF-SHA256 из ключа данных; info — 'MS1 enc' (шифрование) или 'MS1 name' (имена). */
+        function derive(base, info) {
+          const params = { name: 'HKDF', hash: 'SHA-256', salt: text.encode(SALT), info: text.encode(info) };
+          return crypto.subtle.deriveBits(params, base, 256);
+        }
+
+        /** Ключи файлов: AES-GCM — расшифровать, HMAC — имена. */
+        async function keysOf(key) {
+          const base = await crypto.subtle.importKey('raw', key.raw, 'HKDF', false, ['deriveBits']);
+          const encBits = await derive(base, 'MS1 enc');
+          const enc = await crypto.subtle.importKey('raw', encBits, 'AES-GCM', false, ['decrypt']);
+          const nameBits = await derive(base, 'MS1 name');
+          const hmac = { name: 'HMAC', hash: 'SHA-256' };
+          const names = await crypto.subtle.importKey('raw', nameBits, hmac, false, ['sign']);
+          return { kid: key.kid, enc, names };
+        }
+
+        const hex = (bytes) => Array.from(bytes, (byte) => byte.toString(16).padStart(2, '0')).join('');
+
+        /** Имя файла без .bin: 16 hex-знаков HMAC-SHA256(ключ имён, 'live' | 'm:<id цели>'). */
+        async function fileName(keys, label) {
+          const mac = new Uint8Array(await crypto.subtle.sign('HMAC', keys.names, text.encode(label)));
+          return hex(mac.subarray(0, 8));
+        }
+
+        /** deflate-raw → текст (DecompressionStream); испорченные данные — исключение. */
+        async function inflate(bytes) {
+          const stream = new DecompressionStream('deflate-raw');
+          const writer = stream.writable.getWriter();
+          writer.write(bytes).catch(() => undefined);
+          writer.close().catch(() => undefined);
+          const reader = stream.readable.getReader();
+          const parts = [];
+          let size = 0;
+          for (;;) {
+            const { done, value } = await reader.read();
+            if (done) break;
+            parts.push(value);
+            size += value.length;
+          }
+          const all = new Uint8Array(size);
+          let offset = 0;
+          for (const part of parts) {
+            all.set(part, offset);
+            offset += part.length;
+          }
+          return new TextDecoder().decode(all);
+        }
+
+        /** Файл → JSON; подмена, порча, другое имя или другой ключ — VerifyError. */
+        async function open(keys, name, bytes) {
+          const data = new Uint8Array(bytes);
+          const magic = String.fromCharCode(data[0], data[1], data[2]);
+          if (data.length < HEADER + TAG_BYTES || magic !== MAGIC) throw new VerifyError('не снимок');
+          const kid = hex(data.subarray(MAGIC.length, MAGIC.length + KID_BYTES));
+          if (kid !== keys.kid) throw new VerifyError('файл другого ключа');
+          const params = {
+            name: 'AES-GCM',
+            iv: data.slice(MAGIC.length + KID_BYTES, HEADER),
+            additionalData: text.encode(MAGIC + '|' + kid + '|' + name),
+            tagLength: TAG_BYTES * 8,
+          };
+          let plain;
+          try {
+            plain = new Uint8Array(await crypto.subtle.decrypt(params, keys.enc, data.slice(HEADER)));
+          } catch {
+            throw new VerifyError('данные не прошли проверку');
+          }
+          const length = plain.length >= 4 ? new DataView(plain.buffer).getUint32(0) : -1;
+          if (length < 0 || length > plain.length - 4) throw new VerifyError('неверная длина');
+          try {
+            return JSON.parse(await inflate(plain.subarray(4, 4 + length)));
+          } catch {
+            throw new VerifyError('данные не разбираются');
+          }
+        }
+
+        return { VerifyError, parseKey, keysOf, fileName, open };
+      })();
+    </script>
+
     <script>
       const tg = window.Telegram && window.Telegram.WebApp;
       // Два режима: данные в ссылке (#z=… сжато, #t=… старый формат; правки — боту через sendData; ПК снаружи
@@ -2278,6 +2455,11 @@
         sellingSort: 'chance',
         // Нижняя граница цены куклы, ₽ (MIN_DOLL_PRICE_RUB; в данных — mp, у сервера — minDollPriceRub)
         minRub: 1000,
+        // Полный режим (TZ.md, шаг 6): ключ данных из ссылки (&k=), адрес снимка, ключи файлов, итог проверки,
+        // загруженные файлы моделей и их объявления; ссылка без ключа — null
+        snapshot: null,
+        // Время данных по разделам (секунды Unix): снимок заменяет раздел, только если он свежее
+        sectionAt: {},
       };
       const $ = (id) => document.getElementById(id);
       // Данные из ссылки старше этого — плашка «могли устареть» с кнопкой «Обновить»: цели правят несколько
@@ -2287,6 +2469,14 @@
       const SEND_DATA_WAIT_MS = 5000;
       // Открыто не кнопкой «Цели» внизу чата: правки отсюда не уходят (sendData) — в ошибке сказано, где править
       const READ_ONLY_HINT = 'Править — через кнопку «Цели» внизу чата.';
+      /** Снимок полного режима: шифртекст в localStorage (последнее — и без сети); старше недели — удаляется. */
+      const SNAPSHOT_CACHE = 'ms1:';
+      const SNAPSHOT_CACHE_DAYS = 7;
+      /** Открытое приложение берёт свежий снимок не реже (публикуется раз в ~10 минут); файл суток — не чаще. */
+      const SNAPSHOT_REFRESH_MS = 3 * 60_000;
+      const DAY_FILE_REFRESH_MS = 30 * 60_000;
+      /** Обходов в «Журнале» сразу (в снимке — все за сутки); остальные — кнопкой «Показать ещё». */
+      const RUNS_SHOWN = 100;
       const rub = (value) => Number(value).toLocaleString('ru-RU', { maximumFractionDigits: 2 }) + ' ₽';
       const safeUrl = (value) => (typeof value === 'string' && /^https:\/\//.test(value) ? value : null);
       const fmt = (value) => Number(value).toLocaleString('ru-RU');
@@ -2430,6 +2620,9 @@
         return Uint8Array.from(atob(b64 + '='.repeat((4 - (b64.length % 4)) % 4)), (c) => c.charCodeAt(0));
       }
 
+      /** Порядок объявлений модели: продающиеся новые сверху, затем снятые. */
+      const listingOrder = (a, b) => Number(a.removed) - Number(b.removed) || (b.firstSeen || 0) - (a.firstSeen || 0);
+
       function normalize(target) {
         return {
           id: target.id,
@@ -2450,7 +2643,7 @@
           listings: (target.listings || target.offers || [])
             .map(normalizeListing)
             .filter((listing) => listing.url)
-            .sort((a, b) => Number(a.removed) - Number(b.removed) || (b.firstSeen || 0) - (a.firstSeen || 0)),
+            .sort(listingOrder),
         };
       }
 
@@ -3078,7 +3271,6 @@
         const kept = state.targets.filter((t) => !state.deleted.has(t.id));
         const view = state.readOnly ? ' · просмотр' : '';
         $('count').textContent = kept.filter((t) => current(t).active).length + ' из ' + kept.length + view;
-        $('hint').textContent = state.at ? 'данные ' + dataTime(state.at) : '';
         if (shown.length === 0) list.append(el('div', 'empty muted', all.length ? 'Не найдено' : 'Моделей нет'));
         // Сколько объявлений модели подходят сейчас — точка и число у названия.
         const live = new Map();
@@ -3202,6 +3394,8 @@
       }
 
       function renderDetail(target) {
+        // Полный режим: все объявления модели с фото — из файла модели (в снимке и ссылке — первые)
+        loadModelFile(target.id);
         const view = $('detailView');
         view.textContent = '';
         const deleted = state.deleted.has(target.id);
@@ -3607,7 +3801,8 @@
        * выходы, «Оценка шанса».
        */
       function renderProfile(view, p) {
-        if (state.statsOnly) view.append(el('div', 'muted', 'данные ' + dataTime(p.at)));
+        // Время данных — в строке сверху; профиль старше остального (снимок не загрузился) — своё время
+        if (p.at < (state.at || 0) - 120) view.append(el('div', 'muted', 'обходы на ' + dataTime(p.at)));
         const pausedUntil = Number(p.day[9]) || 0;
         if (pausedUntil > nowMinute()) view.append(el('div', 'pause-banner', pauseText(pausedUntil, p.pauseReason)));
         const finds = el('div', 'finds');
@@ -4046,16 +4241,24 @@
         return box;
       }
 
-      function fillRuns(list, p, key) {
+      function fillRuns(list, p, key, all) {
         list.textContent = '';
         const filter = RUN_FILTERS.find(([id]) => id === key) || RUN_FILTERS[0];
-        const runs = p.runs.filter(filter[2]);
+        const matching = p.runs.filter(filter[2]);
+        // Снимок полного режима несёт все обходы за сутки: сразу — первые RUNS_SHOWN, остальные — по кнопке
+        const runs = all ? matching : matching.slice(0, RUNS_SHOWN);
         // Паузы браузеров после блока — строками между обходами (аудит 05.10.2026, М2): во «Все» и «Сбои»
         const pauses = key === 'all' || key === 'failed' ? sessionPauses(p, runs) : [];
         let next = 0;
         for (const run of runs) {
           while (next < pauses.length && pauses[next].minute >= run.minute) list.append(gapRow(pauses[next++]));
           list.append(runRow(p, run));
+        }
+        if (runs.length < matching.length) {
+          const more = el('button', 'runs-more ghost', 'Показать ещё ' + fmt(matching.length - runs.length));
+          more.type = 'button';
+          more.addEventListener('click', () => fillRuns(list, p, key, true));
+          list.append(more);
         }
       }
 
@@ -4968,7 +5171,9 @@
         return parts.join(' · ');
       }
 
+      // 1Д — по часам, только в полном режиме (файл модели снимка); остальные — по дням
       const PRICE_PERIODS = [
+        ['1d', '1Д', 1],
         ['1w', '1Н', 7],
         ['1m', '1М', 30],
         ['all', 'Всё', Infinity],
@@ -5050,10 +5255,11 @@
         let target = null;
         let points = [];
         let allButton = null;
+        let hourButton = null;
         const chart = lineChart(box, {
           tone: 'accent',
           emptyText: 'Мало данных',
-          tip: (point) => ({ value: rub(point.y), label: dayLabel(point.x) }),
+          tip: (point) => ({ value: rub(point.y), label: pointLabel(point) }),
           summary: (shown) => priceSummary(target, shown),
           onScrub: (point) => showHead(point),
         });
@@ -5068,15 +5274,20 @@
             draw(true);
           });
           if (key === 'all') allButton = button;
+          if (key === '1d') hourButton = button;
           switcher.append(button);
         }
 
         function draw(animate) {
-          // В ссылку вошли только последние 30 дней модели — «Всё» повторило бы «1М»: кнопки нет, показ — за 30 дней
-          const key = state.pricePeriod === 'all' && model.short ? '1m' : state.pricePeriod;
-          const period = PRICE_PERIODS.find((item) => item[0] === key) || PRICE_PERIODS[1];
+          // В ссылку вошли только последние 30 дней модели — «Всё» повторило бы «1М»: кнопки нет, показ — за 30 дней.
+          // Цены по часам нет (не полный режим, файл модели ещё не загружен) — вместо 1Д неделя.
+          const hours = state.snapshot ? state.snapshot.prices.get(model.targetId) : null;
+          let key = state.pricePeriod;
+          if (key === 'all' && model.short) key = '1m';
+          if (key === '1d' && !hours) key = '1w';
+          const period = PRICE_PERIODS.find((item) => item[0] === key) || PRICE_PERIODS[2];
           pressed(switcher, period[0]);
-          points = pricePoints(model, period[2]);
+          points = key === '1d' ? hourPricePoints(hours) : pricePoints(model, period[2]);
           const limit = priceLimit(target);
           chart.update(points, { animate, threshold: limit });
           showHead(null);
@@ -5115,15 +5326,39 @@
             if (!limit && !target.active) about = 'на паузе';
             name.textContent = RunText.plain(target.name) + ' · ' + about;
             if (allButton) allButton.hidden = model.short;
+            if (hourButton) hourButton.hidden = !(state.snapshot && state.snapshot.prices.has(model.targetId));
             draw(animate);
             fillSelling(list, p, model, target);
+            // Полный режим: цена по часам (1Д) — из файла модели; загрузится — экран перерисуется
+            loadModelFile(model.targetId);
           },
         };
       }
 
+      /** Подпись точки цены: день («пн, 5 окт.») или час («14:00–15:00»). */
+      function pointLabel(point) {
+        return point.hour ? hourLabel(point.x) : dayLabel(point.x);
+      }
+
+      /**
+       * Точки 1Д: цена модели по часам за последние 24 часа (файл модели полного режима); час без кукол — без точки,
+       * меньше 3 кукол — «мало данных».
+       */
+      function hourPricePoints(hours) {
+        const points = [];
+        for (let index = Math.max(0, hours.counts.length - 24); index < hours.counts.length; index++) {
+          const count = hours.counts[index];
+          if (!(count > 0)) continue;
+          const x = hours.h0 + index * 60;
+          const low = hours.min[index];
+          points.push({ x, y: hours.median[index], low, count, finds: 0, faint: count < 3, hour: true });
+        }
+        return points;
+      }
+
       /** Протяжка: «пн, 5 окт. · медиана 7 400 · мин 5 900 · 12 объявл. · 1 находка». */
       function priceNote(point) {
-        const parts = [dayLabel(point.x), 'медиана ' + fmt(point.y)];
+        const parts = [pointLabel(point), 'медиана ' + fmt(point.y)];
         if (isNum(point.low)) parts.push('мин ' + fmt(point.low));
         parts.push(countText(point.count, 'кукла', 'куклы', 'кукол'));
         if (point.finds > 0) parts.push(countText(point.finds, 'находка', 'находки', 'находок'));
@@ -5141,7 +5376,8 @@
       function priceSummary(target, points) {
         if (!target || points.length === 0) return 'График цены: данных нет';
         const last = points[points.length - 1];
-        return 'Медиана цены ' + target.name + ' по дням: последняя ' + rub(last.y) + ', точек ' + points.length;
+        const step = last.hour ? 'по часам' : 'по дням';
+        return 'Медиана цены ' + target.name + ' ' + step + ': последняя ' + rub(last.y) + ', точек ' + points.length;
       }
 
       /** «В продаже (N)»: живые находки модели и самые дешёвые её куклы; сортировка «шанс / дешёвые / новые». */
@@ -5756,6 +5992,7 @@
         showError('');
         destroyCharts();
         renderStale();
+        renderFresh();
         const screen = topScreen();
         const page = Boolean(screen);
         $('top').hidden = page;
@@ -6006,11 +6243,361 @@
             state.finds = body.f.map((row) => findFromRow(row, body.at));
             attachFinds();
           }
+          // Живые разделы свежее снимка полного режима: он их не заменит
+          if (body.d) state.sectionAt.dashboard = body.at || 0;
+          if (body.S) state.sectionAt.profile = body.at || 0;
+          if (Array.isArray(body.f)) state.sectionAt.finds = body.at || 0;
           render();
         } catch {
           // Страница не с core или core не ответил — остаётся снимок из ссылки
         } finally {
           clearTimeout(timer);
+        }
+      }
+
+      /**
+       * Полный режим: ключ данных и адрес снимка из ссылки (&k=…, &u=…; &s=1 — ссылка похудела: снимок работал, когда
+       * её собирали); ключа нет — null (ссылка как раньше).
+       */
+      function snapshotFromHash() {
+        const key = SnapshotCrypto.parseKey((/[#&]k=([^&]+)/.exec(location.hash) || [])[1]);
+        if (!key) return null;
+        const custom = /[#&]u=([^&]+)/.exec(location.hash);
+        let dataUrl = '';
+        try {
+          dataUrl = new URL(custom ? decodeURIComponent(custom[1]) : '../monitor-data/', location.href).href;
+        } catch {
+          return null;
+        }
+        if (!/^https:\/\//.test(dataUrl)) return null;
+        return {
+          key,
+          dataUrl,
+          thin: /[#&]s=1(?:&|$)/.test(location.hash),
+          keys: null,
+          // Итог последней загрузки горячего файла: ok — прошёл проверку (из сети или сохранённый), error — подменён
+          ok: false,
+          tried: false,
+          error: '',
+          loading: false,
+          fetchedAt: 0,
+          // Разделы до первого снимка (ссылка): файл не прошёл проверку — на экране снова они
+          base: null,
+          // Файл суток (обходы за 24 часа) и когда загружен; файлы моделей: загруженные, их объявления и цена по часам
+          day: null,
+          dayAt: 0,
+          models: new Set(),
+          listings: new Map(),
+          prices: new Map(),
+        };
+      }
+
+      /**
+       * Полный режим (TZ.md, шаг 6): горячий файл из сети мимо кеша, WebCrypto, DecompressionStream; положен поверх
+       * данных — в кеш (localStorage). Нет сети или файла (ключ сменили, снимок ещё не опубликован) — последний
+       * сохранённый; файл подменён или испорчен — «данные не прошли проверку» и данные ссылки (сохранённое не берётся).
+       * Затем — файл суток (все обходы за 24 часа). Открытое приложение повторяет это раз в SNAPSHOT_REFRESH_MS и при
+       * возврате в него.
+       */
+      async function loadSnapshot() {
+        const snapshot = state.snapshot;
+        if (snapshot.loading) return;
+        snapshot.loading = true;
+        snapshot.fetchedAt = Date.now();
+        try {
+          if (!snapshot.keys) snapshot.keys = await SnapshotCrypto.keysOf(snapshot.key);
+          const name = await SnapshotCrypto.fileName(snapshot.keys, 'live');
+          const file = await snapshotFile(name);
+          snapshot.tried = true;
+          snapshot.ok = Boolean(file.body);
+          snapshot.error = file.invalid ? 'данные не прошли проверку' : '';
+          if (file.invalid && snapshot.base) {
+            // Подменённый файл: на экране — данные ссылки, а не прошлый снимок
+            restoreSections(snapshot.base);
+            snapshot.base = null;
+            render();
+          }
+          if (file.body) useFile(name, file, (body) => useSnapshot(body));
+          if (!file.invalid) await loadDayFile();
+        } catch {
+          // Старый WebView без WebCrypto или неожиданные данные — остаются данные ссылки
+        } finally {
+          snapshot.loading = false;
+        }
+        renderFresh();
+      }
+
+      /** Пора обновить снимок: открытое приложение на экране, прошлая загрузка — давно. */
+      function snapshotDue() {
+        const snapshot = state.snapshot;
+        if (!snapshot || snapshot.loading || document.visibilityState !== 'visible') return false;
+        return Date.now() - snapshot.fetchedAt >= SNAPSHOT_REFRESH_MS;
+      }
+
+      /**
+       * Файл снимка: из сети; нет сети или файла (404) — сохранённый (cached). Не прошёл проверку: из сети — invalid,
+       * сохранённый — удаляется. Итог: body — JSON (null — нет), bytes — шифртекст для кеша.
+       */
+      async function snapshotFile(name) {
+        let bytes = null;
+        try {
+          bytes = await fetchSnapshot(name);
+        } catch {
+          // Нет сети — сохранённый
+        }
+        if (bytes) {
+          const body = await openSnapshot(name, bytes);
+          return { body, bytes, cached: false, invalid: !body };
+        }
+        const cached = readCached(name);
+        const body = cached ? await openSnapshot(name, cached) : null;
+        if (cached && !body) dropCached(name);
+        return { body, bytes: cached, cached: true, invalid: false };
+      }
+
+      /** Расшифровать файл снимка; подменён, испорчен, чужого ключа или не того формата (v) — null. */
+      async function openSnapshot(name, bytes) {
+        try {
+          const body = await SnapshotCrypto.open(state.snapshot.keys, name, bytes);
+          return body && body.v === 1 ? body : null;
+        } catch (error) {
+          if (error instanceof SnapshotCrypto.VerifyError) return null;
+          throw error;
+        }
+      }
+
+      /**
+       * Применить файл (apply); не получилось — сохранённый удаляется (иначе он ломал бы каждое открытие), из сети —
+       * в кеш только после удачного применения.
+       */
+      function useFile(name, file, apply) {
+        try {
+          apply(file.body);
+        } catch (error) {
+          if (file.cached) dropCached(name);
+          throw error;
+        }
+        if (!file.cached) writeCached(name, file.bytes);
+      }
+
+      /** Снимок поверх данных; что-то взято — обходы файла суток снова к профилю и перерисовка. */
+      function useSnapshot(body) {
+        if (!applySnapshot(body)) return;
+        mergeDay();
+        render();
+      }
+
+      /** Разделы данных на экране: до первого снимка — данные ссылки. */
+      function sectionsNow() {
+        const { targets, watched, dashboard, profile, finds, at, minRub } = state;
+        return { targets, watched, dashboard, profile, finds, at, minRub, sectionAt: { ...state.sectionAt } };
+      }
+
+      function restoreSections(saved) {
+        Object.assign(state, saved, { sectionAt: { ...saved.sectionAt } });
+        attachFinds();
+      }
+
+      /**
+       * Снимок поверх данных ссылки (TZ.md, шаг 6): каждый раздел — от того, у кого он свежее; раздела нет в ссылке —
+       * из снимка. Правки (цены, пауза, новые, удалённые, «Слежу») не трогаются. Объявления моделей, которых нет в
+       * снимке (ссылка берёт их по кругу, снимок — первые), остаются: открытый экран объявления не закроется. Что-то
+       * взято из снимка — true.
+       */
+      function applySnapshot(body) {
+        const at = Number(body.at) || 0;
+        const fresher = (section, present) => present && at > (state.sectionAt[section] || 0);
+        const take = {
+          targets: !state.statsOnly && fresher('targets', Array.isArray(body.targets)),
+          watched: !state.statsOnly && fresher('watched', Array.isArray(body.w)),
+          dashboard: !state.statsOnly && fresher('dashboard', Boolean(body.d)),
+          profile: fresher('profile', Boolean(body.S)),
+          finds: fresher('finds', Array.isArray(body.f)),
+        };
+        const taken = Object.keys(take).filter((section) => take[section]);
+        if (taken.length === 0) return false;
+        if (!state.snapshot.base) state.snapshot.base = sectionsNow();
+        if (take.targets) {
+          const previous = new Map(state.targets.map((target) => [target.id, target.listings]));
+          state.targets = body.targets.map(normalize);
+          for (const target of state.targets) {
+            keepListings(target, previous.get(target.id));
+            mergeModelListings(target.id);
+          }
+        }
+        if (take.watched) state.watched = body.w.map(watchFromRow);
+        if (take.dashboard) state.dashboard = dashboardFrom(body.d);
+        if (take.profile) state.profile = profileFrom(body.S);
+        if (take.finds) state.finds = body.f.map((row) => findFromRow(row, at));
+        for (const section of taken) state.sectionAt[section] = at;
+        if (isNum(body.minDollPriceRub)) state.minRub = body.minDollPriceRub;
+        state.at = Math.max(state.at || 0, at);
+        attachFinds();
+        return true;
+      }
+
+      /** Объявления цели, которых нет в новых данных, — к ним (уже известные — как в новых данных). */
+      function keepListings(target, old) {
+        if (!old || old.length === 0) return;
+        const known = new Set(target.listings.map((listing) => listing.id));
+        const kept = old.filter((listing) => listing.id && !known.has(listing.id));
+        if (kept.length > 0) target.listings = target.listings.concat(kept).sort(listingOrder);
+      }
+
+      /**
+       * Файл суток (TZ.md, шаг 6): все обходы за 24 часа с подробностями — к профилю (горячий файл несёт только
+       * последние). Из сети — не чаще раза в DAY_FILE_REFRESH_MS (он и публикуется раз в час).
+       */
+      async function loadDayFile() {
+        const snapshot = state.snapshot;
+        if (!snapshot.day || Date.now() - snapshot.dayAt >= DAY_FILE_REFRESH_MS) {
+          const name = await SnapshotCrypto.fileName(snapshot.keys, 'day');
+          const file = await snapshotFile(name);
+          if (file.body && file.body.S) {
+            useFile(name, file, (body) => {
+              snapshot.day = profileFrom(body.S);
+            });
+            snapshot.dayAt = Date.now();
+          }
+        }
+        if (mergeDay()) render();
+      }
+
+      /** Обходы файла суток — к профилю на экране (новый профиль из снимка или ссылки — снова). Добавились — true. */
+      function mergeDay() {
+        const day = state.snapshot ? state.snapshot.day : null;
+        return Boolean(day && state.profile && StatsData.mergeRuns(state.profile, day));
+      }
+
+      /** Объявления из файла модели — к объявлениям цели (уже известные остаются как есть). Добавились — true. */
+      function mergeModelListings(targetId) {
+        const target = findTarget(targetId);
+        const extra = state.snapshot ? state.snapshot.listings.get(targetId) : null;
+        if (!target || !extra) return false;
+        const known = new Set(target.listings.map((listing) => listing.id));
+        const added = extra.filter((listing) => !known.has(listing.id));
+        if (added.length === 0) return false;
+        target.listings = target.listings.concat(added).sort(listingOrder);
+        return true;
+      }
+
+      /**
+       * Файл модели (TZ.md, шаг 6): каталог объявлений модели за 30 дней (фото — у первых 30) и цена по часам (1Д на
+       * экране «Цена модели»). Загружается, когда открыта карточка модели или её цена; что-то добавилось, а экран ещё
+       * открыт — он перерисовывается. Не загрузился — попробуется при следующем открытии.
+       */
+      async function loadModelFile(targetId) {
+        const snapshot = state.snapshot;
+        if (!snapshot || !snapshot.keys || targetId <= 0 || snapshot.models.has(targetId)) return;
+        snapshot.models.add(targetId);
+        let loaded = false;
+        try {
+          const name = await SnapshotCrypto.fileName(snapshot.keys, 'm:' + targetId);
+          const file = await snapshotFile(name);
+          if (file.body && Array.isArray(file.body.listings)) {
+            useFile(name, file, (body) => {
+              snapshot.listings.set(
+                targetId,
+                body.listings.map(normalizeListing).filter((listing) => listing.url),
+              );
+              const prices = hourPrices(body.p);
+              if (prices) snapshot.prices.set(targetId, prices);
+            });
+            loaded = true;
+          }
+        } catch {
+          // Нет сети или неожиданные данные — карточка как есть
+        }
+        if (!loaded) {
+          snapshot.models.delete(targetId);
+          return;
+        }
+        mergeModelListings(targetId);
+        const top = state.stack[state.stack.length - 1];
+        const model = top && top.type === 'model' && top.id === targetId;
+        if (model || (top && top.type === 'price' && top.targetId === targetId)) render();
+      }
+
+      /** Цена модели по часам из файла модели (p: h0, n, md, mn); нет или не тот вид — null. */
+      function hourPrices(p) {
+        if (!p || !isNum(p.h0) || !Array.isArray(p.n) || !Array.isArray(p.md) || !Array.isArray(p.mn)) return null;
+        return { h0: p.h0, counts: p.n.map(Number), median: p.md.map(Number), min: p.mn.map(Number) };
+      }
+
+      /** Файл снимка из сети мимо кеша браузера и CDN; файла нет (404) — null. */
+      async function fetchSnapshot(name) {
+        const url = state.snapshot.dataUrl + name + '.bin?t=' + Date.now();
+        const response = await fetch(url, { cache: 'no-store', credentials: 'omit', referrerPolicy: 'no-referrer' });
+        if (response.status === 404) return null;
+        if (!response.ok) throw new Error('снимок: HTTP ' + response.status);
+        return new Uint8Array(await response.arrayBuffer());
+      }
+
+      /** Сохранённый шифртекст снимка (localStorage); нет или не читается — null. */
+      function readCached(name) {
+        try {
+          const item = JSON.parse(localStorage.getItem(SNAPSHOT_CACHE + name) || 'null');
+          if (!item || typeof item.b !== 'string') return null;
+          return Uint8Array.from(atob(item.b), (c) => c.charCodeAt(0));
+        } catch {
+          return null;
+        }
+      }
+
+      /** Шифртекст — в localStorage: последнее видно и без сети. Сохранённые раньше недели назад — удаляются. */
+      function writeCached(name, bytes) {
+        try {
+          let binary = '';
+          for (let index = 0; index < bytes.length; index += 0x8000) {
+            binary += String.fromCharCode.apply(null, bytes.subarray(index, index + 0x8000));
+          }
+          pruneCache();
+          localStorage.setItem(SNAPSHOT_CACHE + name, JSON.stringify({ t: Date.now(), b: btoa(binary) }));
+        } catch {
+          // Хранилище переполнено или запрещено — без кеша
+        }
+      }
+
+      function dropCached(name) {
+        try {
+          localStorage.removeItem(SNAPSHOT_CACHE + name);
+        } catch {
+          // Хранилище запрещено — кеша и так нет
+        }
+      }
+
+      /** Снимки в localStorage старше SNAPSHOT_CACHE_DAYS (в том числе прежнего ключа) — удалить. */
+      function pruneCache() {
+        const oldest = Date.now() - SNAPSHOT_CACHE_DAYS * 86_400_000;
+        for (let index = localStorage.length - 1; index >= 0; index--) {
+          const key = localStorage.key(index);
+          if (!key || !key.startsWith(SNAPSHOT_CACHE)) continue;
+          let saved = 0;
+          try {
+            saved = Number(JSON.parse(localStorage.getItem(key)).t) || 0;
+          } catch {
+            saved = 0;
+          }
+          if (saved < oldest) localStorage.removeItem(key);
+        }
+      }
+
+      /**
+       * Строка сверху: на какое время данные на экране (ссылка или снимок) и итог снимка: не прошёл проверку — так и
+       * написано; ссылка похудела, а снимка нет (файла нет, нет сети и сохранённого) — «полные данные недоступны».
+       */
+      function renderFresh() {
+        const line = $('fresh');
+        line.textContent = '';
+        line.hidden = !state.at;
+        if (!state.at) return;
+        line.append('данные на ' + dataTime(state.at) + ' (' + ago(Math.floor(state.at / 60)) + ')');
+        const snapshot = state.snapshot;
+        if (!snapshot) return;
+        if (snapshot.error) {
+          line.append(el('span', 'bad', ' · ' + snapshot.error));
+        } else if (snapshot.thin && snapshot.tried && !snapshot.ok) {
+          line.append(el('span', 'bad', ' · полные данные недоступны'));
         }
       }
 
@@ -6085,17 +6672,36 @@
           state.profile = fromLink.profile || null;
           state.finds = fromLink.finds || [];
           attachFinds();
+          // Время разделов ссылки: снимок полного режима заменит раздел, только если он свежее; профиля в ссылке
+          // «Цели» нет, а в ссылке табло нет целей, «Слежу» и сводки
+          const linkAt = fromLink.at || 0;
+          const targetsAt = state.statsOnly ? 0 : linkAt;
+          state.sectionAt = {
+            targets: targetsAt,
+            watched: targetsAt,
+            dashboard: targetsAt,
+            profile: state.profile ? linkAt : 0,
+            finds: linkAt,
+          };
           render();
           if (tg.initData && !STATIC_HOST.test(location.hostname)) refreshFromLive();
+          // Ссылка с ключом данных (&k=) — поверх неё свежий зашифрованный снимок с GitHub Pages
+          state.snapshot = snapshotFromHash();
+          if (state.snapshot) loadSnapshot();
         } else {
           load().catch((error) => showError('Не загрузилось: ' + error.message));
         }
         // Приложение могли оставить открытым: плашка появится, когда данным исполнится 30 минут; «N мин назад» у
-        // находок идёт дальше.
+        // находок идёт дальше. Полный режим — свежий снимок раз в SNAPSHOT_REFRESH_MS и при возврате в приложение.
         setInterval(() => {
           renderStale();
+          renderFresh();
           if (!$('listView').hidden) renderFinds();
+          if (snapshotDue()) loadSnapshot();
         }, 60_000);
+        document.addEventListener('visibilitychange', () => {
+          if (snapshotDue()) loadSnapshot();
+        });
       }
 
       start();
