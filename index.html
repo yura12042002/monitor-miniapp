@@ -2220,10 +2220,11 @@
           fresh: 32768,
           stats: 65536,
           unconfirmed: 131072,
+          check: 262144,
         };
         /** Красные флаги: жёсткие (не выше 39) и мягкие (не выше 69) — HARD_FLAGS и SOFT_FLAGS сервера. */
         const HARD = FLAG.reserved | FLAG.technical | FLAG.bait | FLAG.part | FLAG.cheap | FLAG.unconfirmed;
-        const SOFT = FLAG.lot | FLAG.preorder | FLAG.imported | FLAG.repro;
+        const SOFT = FLAG.lot | FLAG.preorder | FLAG.imported | FLAG.repro | FLAG.check;
         /** Уровни «шанса» (SCORE_LEVELS). */
         const LEVELS = { hot: 70, neutral: 40 };
         /** Порог ниже этого — заглушка цели на паузе (STUB_THRESHOLD_KOP): цвета нет. */
@@ -3212,7 +3213,7 @@
         if (groups.length > 0) $('tabLive').append(pulse());
       }
 
-      /** Блок находок: вкладки «Модели» и «Обходы» профиля статистики. */
+      /** Блок находок вкладки «Модели». */
       function fillFinds(box, groups) {
         box.textContent = '';
         box.hidden = groups.length === 0;
@@ -3797,18 +3798,16 @@
 
       /**
        * Вкладка «Обходы» по профилю статистики (TZ.md «Поиск по моделям, страница обхода и графики», шаг 5), сверху
-       * вниз: находки, «Новые объявления», плитки за сутки, «Цены моделей», «Журнал», «Блоки», «Запросы за сутки»,
-       * выходы, «Оценка шанса».
+       * вниз: «Новые объявления», плитки за сутки, «Цены моделей», «Журнал», «Блоки», «Запросы за сутки», выходы,
+       * «Оценка шанса». «Подходят сейчас» здесь нет (решение владельца 07.10.2026) — только на вкладке «Модели».
        */
       function renderProfile(view, p) {
         // Время данных — в строке сверху; профиль старше остального (снимок не загрузился) — своё время
         if (p.at < (state.at || 0) - 120) view.append(el('div', 'muted', 'обходы на ' + dataTime(p.at)));
         const pausedUntil = Number(p.day[9]) || 0;
         if (pausedUntil > nowMinute()) view.append(el('div', 'pause-banner', pauseText(pausedUntil, p.pauseReason)));
-        const finds = el('div', 'finds');
-        fillFinds(finds, findGroups());
         const card = el('div', 'panel chart-card');
-        view.append(finds, card);
+        view.append(card);
         newListingsCard(card, p);
         view.append(dayTiles(p));
         const prices = priceList(p);
